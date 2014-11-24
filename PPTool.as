@@ -451,47 +451,6 @@
 		}//endfunction
 		
 		//=============================================================================
-		// align the UI regions
-		//=============================================================================
-		private var prevW:int=0;
-		private var prevH:int=0;
-		public function chkAndResize():void
-		{
-			var sw:int = stage.stageWidth;
-			var sh:int = stage.stageHeight;
-			if (target!=null) main.P.visible = true; else main.P.visible = false;
-			
-			if (prevW==sw && prevH==sh) return;
-			
-			trace("chkAndResize sw,sh="+sw+","+sh+"   prevW,prevH="+prevW+","+prevH);
-			prevW = sw;
-			prevH = sh;
-			  
-			main.R.x = sw-main.R.width;
-			main.T.r.x = sw - main.L.width - main.R.width-main.T.r.width+1;
-			main.T.m.width = sw - main.T.l.width - main.T.r.width - main.L.width - main.R.width+1;
-			main.P.m.width = sw - main.L.width - main.R.width - main.P.l.width;
-			main.L.m.height = sh - main.L.t.height - main.L.b.height;
-			main.L.b.y = sh - main.L.b.height;
-			main.R.m.height = sh - main.R.t.height - main.R.b.height+2;
-			main.R.b.y = sh - main.R.b.height;
-			main.B.y = sh - main.B.height;
-			main.B.r.x = sw - main.L.width - main.R.width - main.B.r.width;
-			main.B.m.width = sw - main.L.width - main.R.width - main.B.l.width - main.B.r.width;
-			
-			LHS.canvas.y = main.L.t.height;
-			LHS.resize(sh-main.L.t.height-main.L.b.height);
-			if (RHS!=null)
-			{
-				RHS.canvas.x = main.R.x-25;
-				trace("RHS.canvas.x="+RHS.canvas.x);
-				RHS.canvas.y = main.R.t.height;
-				RHS.resize(sh-main.R.t.height);
-			}
-			
-		}//endfunction
-		
-		//=============================================================================
 		// lets user select pages to generate PDF with
 		//=============================================================================
 		private function showGenPDF():Sprite
@@ -1753,11 +1712,16 @@
 		}//endfunction
 		
 		//=============================================================================
-		// Main loop
+		// Main loop, resizes elements
 		//=============================================================================
 		private var prevLHSSelected:Page = null;
+		private var prevW:int=0;
+		private var prevH:int=0;
 		private function enterFrameHandler(ev:Event):void
 		{
+			var sw:int = stage.stageWidth;
+			var sh:int = stage.stageHeight;
+			
 			// ----- switch page
 			if (LHS.selected!=prevLHSSelected)
 			{
@@ -1766,12 +1730,84 @@
 				updateCanvas();
 			}
 			
-			canvas.x = stage.stageWidth/2+(main.L.width-main.R.width)/2;
-			canvas.y = stage.stageHeight/2+(main.T.height-main.B.height)/2;
+			canvas.x = sw/2+(main.L.width-main.R.width)/2;
+			canvas.y = sh/2+(main.T.height-main.B.height)/2;
 			paper.x = canvas.x;
 			paper.y = canvas.y;
 			
-			chkAndResize();
+			// ----- 
+			if (target!=null) main.P.visible = true; else main.P.visible = false;
+			if (main.P.visible)
+			{
+				var page:Page = LHS.selected;
+				var ib:MovieClip = main.P.l as MovieClip;
+				if (page.Pics.indexOf(target)==page.Pics.length-1)	// if already at top 
+				{
+					ib.b1.visible = false;
+					ib.b2.visible = false;
+				}
+				else
+				{
+					ib.b1.visible = true;
+					ib.b2.visible = true;
+				}
+				if (page.Pics.indexOf(target)==0)					// if already at bottom
+				{
+					ib.b3.visible = false;
+					ib.b4.visible = false;
+				}
+				else
+				{
+					ib.b3.visible = true;
+					ib.b4.visible = true;
+				}
+				ib.b5.visible = false;
+				ib.b6.visible = false;
+				if (target is GroupImage)
+				{
+					if (page.Pics.indexOf(target)==-1)					// group pic not in page
+						ib.b5.visible = true;
+					else
+						ib.b6.visible = true;
+				}
+				
+				var xoff:int=ib.getChildAt(1).x;
+				for (var i:int=1; i<ib.numChildren; i++)
+					if (ib.getChildAt(i).visible)
+					{
+						ib.getChildAt(i).x = xoff;
+						xoff += ib.getChildAt(i).width+5;
+					}
+			}//endif
+			
+			if (prevW==sw && prevH==sh) return;
+			
+			trace("chkAndResize sw,sh="+sw+","+sh+"   prevW,prevH="+prevW+","+prevH);
+			prevW = sw;
+			prevH = sh;
+			  
+			main.R.x = sw-main.R.width;
+			main.T.r.x = sw - main.L.width - main.R.width-main.T.r.width+1;
+			main.T.m.width = sw - main.T.l.width - main.T.r.width - main.L.width - main.R.width+1;
+			main.L.m.height = sh - main.L.t.height - main.L.b.height;
+			main.L.b.y = sh - main.L.b.height;
+			main.R.m.height = sh - main.R.t.height - main.R.b.height+2;
+			main.R.b.y = sh - main.R.b.height;
+			main.B.y = sh - main.B.height;
+			main.B.r.x = sw - main.L.width - main.R.width - main.B.r.width;
+			main.B.m.width = sw - main.L.width - main.R.width - main.B.l.width - main.B.r.width;
+			
+			main.P.l.getChildAt(0).width = sw-main.L.width-main.R.width;
+			
+			LHS.canvas.y = main.L.t.height;
+			LHS.resize(sh-main.L.t.height-main.L.b.height);
+			if (RHS!=null)
+			{
+				RHS.canvas.x = main.R.x-25;
+				trace("RHS.canvas.x="+RHS.canvas.x);
+				RHS.canvas.y = main.R.t.height;
+				RHS.resize(sh-main.R.t.height);
+			}
 			
 			//prn("Mem:"+System.totalMemory);
 		}//endfunction
@@ -1810,14 +1846,15 @@
 			if (target == null) return;
 			
 			// ----- if pics top bar functions clicked ------------------------
-			if (main.P.l.hitTestPoint(mX, mY))
+			var ib:MovieClip = main.P.l as MovieClip;
+			if (ib.hitTestPoint(mX, mY))
 			{
-				if (main.P.l.b1.hitTestPoint(mX, mY))		// TOP LAYER
+				if (ib.b1.visible && ib.b1.hitTestPoint(mX, mY))		// TOP LAYER
 				{
 					page.Pics.splice(page.Pics.indexOf(target), 1);
 					page.Pics.push(target);
 				}
-				else if (main.P.l.b2.hitTestPoint(mX, mY))	// MOVE UP
+				else if (ib.b2.visible && ib.b2.hitTestPoint(mX, mY))	// MOVE UP
 				{
 					if (page.Pics.indexOf(target)<page.Pics.length-1)
 					{
@@ -1826,7 +1863,7 @@
 						page.Pics[uidx+1] = target;
 					}
 				}
-				else if (main.P.l.b3.hitTestPoint(mX, mY))	// MOVE DOWN
+				else if (ib.b3.visible && ib.b3.hitTestPoint(mX, mY))	// MOVE DOWN
 				{
 					if (page.Pics.indexOf(target)>0)
 					{
@@ -1835,14 +1872,14 @@
 						page.Pics[didx-1] = target;
 					}
 				}
-				else if (main.P.l.b4.hitTestPoint(mX, mY))	// BOTTOM LAYER
+				else if (ib.b4.visible && ib.b4.hitTestPoint(mX, mY))	// BOTTOM LAYER
 				{
 					page.Pics.splice(page.Pics.indexOf(target), 1);
 					page.Pics.unshift(target);
 				}
-				else if (main.P.l.b5.hitTestPoint(mX, mY))	// GROUP
+				else if (ib.b5.visible && ib.b5.hitTestPoint(mX, mY))	// GROUP
 				{
-					 if (page.Pics.indexOf(target)==-1)	// ----- group pics not in page
+					if (page.Pics.indexOf(target)==-1)	// ----- group pics not in page
 					{
 						var I:Vector.<Image> = (GroupImage)(target).Images;
 						var gidx:int = 0;
@@ -1855,9 +1892,9 @@
 						page.Pics.splice(gidx, 0, target);	// add grp pic to page
 					}
 				}
-				else if (main.P.l.b6.hitTestPoint(mX, mY))	// UNGROUP
+				else if (ib.b6.visible && ib.b6.hitTestPoint(mX, mY))	// UNGROUP
 				{
-					if (page.Pics.indexOf(target) != -1)	// grp pic in page
+					if (target is GroupImage && page.Pics.indexOf(target) != -1)	// grp pic in page
 					{
 						var gidx:int = page.Pics.indexOf(target);
 						page.Pics.splice(gidx, 1);			// remove grp pic
@@ -1866,16 +1903,16 @@
 							page.Pics.splice(gidx, 0, I[k]);
 					}
 				}
-				else if (main.P.l.b7.hitTestPoint(mX, mY))	// TRASH
+				else if (ib.b7.visible && ib.b7.hitTestPoint(mX, mY))	// TRASH
 				{
 					page.Pics.splice(page.Pics.indexOf(target),1);
 					target = null;
 				}
-				else if (main.P.l.b8.hitTestPoint(mX, mY))	// LOCK
+				else if (ib.b8.visible && ib.b8.hitTestPoint(mX, mY))	// LOCK
 				{
 					
 				}
-				else if (main.P.l.b9.hitTestPoint(mX, mY))	// CROP
+				else if (ib.b9.visible && ib.b9.hitTestPoint(mX, mY))	// CROP
 				{
 					if (!(target is CropImage))
 					{
@@ -2346,7 +2383,6 @@
 			addChild(LHS.canvas);
 			prevW = 0;
 			prevH = 0;
-			chkAndResize();	// force refresh
 		}//endfunction
 		
 		//=============================================================================

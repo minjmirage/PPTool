@@ -60,7 +60,7 @@ if(!isset($_SESSION['userid']))
 		httpURL:"http://symspace.e360.cn/",token:"<?=$token?>",utoken:"<?=$token?>"
 		};
 		//alert("token = "+"<?=$token?>");
-		swfobject.embedSWF(	"PPTool.swf",
+		swfobject.embedSWF(	"Preloader.swf",
 							"flashContentInner", "100%", "100%", "11.2.0",
 							null,
 							flashvars, params, attributes);

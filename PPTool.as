@@ -25,7 +25,6 @@
 	import flash.net.FileFilter;
 	import flash.net.FileReference;
 	import flash.net.navigateToURL;
-	import flash.net.SharedObject;
 	import flash.net.URLLoader;
 	import flash.net.URLRequest;
 	import flash.net.URLRequestMethod;
@@ -40,13 +39,16 @@
 	import org.alivepdf.layout.Orientation;
 	import org.alivepdf.pdf.PDF;
 	import org.alivepdf.saving.Method;
+	import mx.utils.Base64Encoder;
+	import mx.utils.Base64Decoder;
 	
+	import com.greensock.TweenLite;
 	
 	[SWF(width = "800", height = "600", frameRate = "30")];
 			
 	public class PPTool extends Sprite
 	{
-		public static var baseUrl:String = "http://symspace.e360.cn/";
+		public static var baseUrl:String = "http://ruanzhuangyun.cn/";// "http://symspace.e360.cn/";
 		
 		public var saveId:String = "";		// id of the current saved project
 		public var userId:int = 0;
@@ -59,7 +61,6 @@
 		private var LHS:LHSMenu = null;
 		private var RHS:RHSMenu = null;
 		private var sliderBar:Sprite = null;
-		private var topBar:Sprite = null;
 		
 		private var undoStk:Array = [];
 		private var redoStk:Array = [];
@@ -75,14 +76,30 @@
 		private var textLayer:Sprite = null;
 		private var paper:Sprite = null;			// the thingy blow the canvas
 		
-		private var disableClick:Boolean = false;	// prevents clicking on stuff behind popup
+		private var disableClick:int = 0;	// prevents clicking on stuff behind popup if >0
 		
 		private var keyShift:Boolean = false;
+		private var keyControl:Boolean = false;
 		
 		//=============================================================================
 		// 
 		//=============================================================================
-		public function PPTool() 
+		public function PPTool():void
+		{
+			var ppp:Sprite = this;
+			function addedToStageChk(ev:Event):void
+			{
+				if (stage == null) return;
+				ppp.removeEventListener(Event.ENTER_FRAME, addedToStageChk);
+				init();
+			}
+			ppp.addEventListener(Event.ENTER_FRAME, addedToStageChk);
+		}//endconstr
+		
+		//=============================================================================
+		// 
+		//=============================================================================
+		public function init() : void
 		{
 			stage.scaleMode = "noScale";
 			stage.align = "topLeft";
@@ -156,105 +173,12 @@
 			sliderBar.y = 16;
 			main.B.l.addChild(sliderBar);
 			
-			// ----- specifies UI button listeners
-			topBar = main.T;
-			main.T.l.addEventListener(MouseEvent.CLICK,function(ev:Event):void 
-			{
-				if (main.T.l.b1.hitTestPoint(stage.mouseX,stage.mouseY))		// show file menu
-				{
-					var s:Sprite = showFileOptions();
-					s.x = main.T.l.b1.x+main.T.l.x+main.T.x;
-					s.y = main.T.l.b1.y+main.T.l.b1.height;
-					//showSaveLoad(function():void {disableClick=false;});
-				}
-				else if (main.T.l.b2.hitTestPoint(stage.mouseX,stage.mouseY))	// details
-				{
-					showProjectProperties();
-				}
-				else if (main.T.l.b3.hitTestPoint(stage.mouseX,stage.mouseY))	// 
-				{
-					showItemsList();
-				}
-				else if (main.T.l.b4.hitTestPoint(stage.mouseX,stage.mouseY))	// 
-				{
-					showSlideShow();
-				}
-				else if (main.T.l.b5.hitTestPoint(stage.mouseX,stage.mouseY))	// 
-				{
-					if (stage.displayState!=StageDisplayState.FULL_SCREEN)
-						stage.displayState = StageDisplayState.FULL_SCREEN;
-					else
-						stage.displayState = StageDisplayState.NORMAL;
-				}
-				else if (main.T.l.b6.hitTestPoint(stage.mouseX,stage.mouseY))	// undo
-				{	
-					trace("undo");
-					if (undoStk.length>1)
-					{
-						redoStk.push(undoStk.pop());
-						//prn(undoStk[undoStk.length-1]);
-						restoreFromData(undoStk[undoStk.length-1]);
-					}
-				}
-				else if (main.T.l.b7.hitTestPoint(stage.mouseX,stage.mouseY))	// redo
-				{
-					trace("redo");
-					if (redoStk.length>0)
-					{
-						undoStk.push(redoStk.pop());
-						restoreFromData(undoStk[undoStk.length-1]);
-					}
-				}
-			});
-			main.T.r.addEventListener(MouseEvent.CLICK,function(ev:Event):void 
-			{
-				if (main.T.r.b1.hitTestPoint(stage.mouseX,stage.mouseY))		// add text
-				{
-					addText();
-				}
-				else if (main.T.r.b2.hitTestPoint(stage.mouseX, stage.mouseY))	// add colored squares
-				{
-					var hexColor:String = "#12345678";
-					var img:Image = new Image(hexColor, hexColor, new BitmapData(100, 100, false, parseInt(hexColor.split("#")[1],16)));
-					LHS.selected.Pics.push(img);					// add image to Page
-					
-					mouseMoveFn = function():void 	// start drag
-					{
-						img.centerTo(canvas.mouseX,canvas.mouseY);
-					}
-					
-					updateCanvas();
-				}
-				else if (main.T.r.b4.hitTestPoint(stage.mouseX, stage.mouseY))	// add arrow
-				{
-					trace("add arrow");
-					arrow = new Arrow();
-					LHS.selected.Arrows.push(arrow);					// add image to Page
-					updateCanvas();
-					var s:String = getCurState();
-					if (undoStk[undoStk.length-1]!=s) 
-					{
-						trace("push curState="+s);
-						undoStk.push(s);
-						updatePageImage();
-					}
-				}
-			});
-			main.B.r.addEventListener(MouseEvent.CLICK,function(ev:Event):void 
-			{
-				if (main.B.r.b1.hitTestPoint(stage.mouseX,stage.mouseY))		// set bg
-				{
-					showSetAsBackground();
-				}
-				else if (main.B.r.b2.hitTestPoint(stage.mouseX,stage.mouseY))	// upload user image
-				{
-					userSelectAndUploadImage();
-				}
-			});
-			
 			if (root.loaderInfo.parameters.httpURL!=null) baseUrl = root.loaderInfo.parameters.httpURL+"";	// why the F$%$ this doesnt work
 			if (root.loaderInfo.parameters.token!=null) userToken = root.loaderInfo.parameters.token+"";
 			if (baseUrl.charAt(baseUrl.length - 1) != "/")	baseUrl += "/";
+			
+			if (parent is Preloader && (Preloader)(parent).baseUrl != null)		{baseUrl = (Preloader)(parent).baseUrl;	trace("parent.baseUrl="+baseUrl); }
+			if (parent is Preloader && (Preloader)(parent).userToken != null) 	{userToken = (Preloader)(parent).userToken;	trace("parent.token="+userToken); }
 			
 			//addChild(utils.createText("baseUrl="+baseUrl+"  userToken="+userToken));
 			
@@ -290,7 +214,6 @@
 				RHS.updateCanvas = updateCanvas;
 			}
 			
-			
 			if (userToken==null)
 			{
 				// ----- force user to login ----------------------------
@@ -305,6 +228,7 @@
 			{
 				initAfterLogin();
 			}
+			
 			/*
 			var ldr:URLLoader = new URLLoader();
 			var req:URLRequest = new URLRequest(baseUrl+"?n=api&a=login&c=user");
@@ -327,6 +251,7 @@
 				}
 			}
 			*/
+			
 			undoStk.push(getCurState());	// save default blank state
 		}//endconstr
 		
@@ -356,7 +281,8 @@
 		//=============================================================================
 		private function disableInterractions(alp:Number=0.8):Function
 		{
-			disableClick = true;
+			trace("disableInterractions("+alp+")");
+			disableClick++;
 			var s:Sprite = new Sprite();
 			
 			var prevWH:Point = new Point();
@@ -377,7 +303,8 @@
 			
 			function remove():void
 			{
-				disableClick = false;
+				disableClick--;
+				trace("enableClick!");
 				s.removeEventListener(Event.ENTER_FRAME, resizeHandler);
 				if (s.parent!=null) s.parent.removeChild(s);
 			}
@@ -620,23 +547,10 @@
 			
 			var enableI:Function = disableInterractions();
 			
-			function createText(txt:String):TextField
-			{
-				if (txt==null)	txt="null";
-				var tf:TextField = new TextField();
-				tf.wordWrap = false;
-				tf.autoSize = "left";
-				var tff:TextFormat = tf.defaultTextFormat;
-				tff.size = 13;
-				tf.defaultTextFormat = tff;
-				tf.htmlText = txt;
-				return tf;
-			}//endfunction
-			
 			function createBtn(txt:String):Sprite
 			{
 				var s:Sprite = new Sprite();
-				var tf:TextField = createText(txt);
+				var tf:TextField = utils.createText(txt);
 				tf.mouseEnabled = false;
 				tf.x = 5,
 				tf.y = 5;
@@ -646,41 +560,35 @@
 			}//endfunction
 			
 			// ----- creates the top labels -------------------------
-			var ItmLst:Sprite = new Sprite();	// this is the main sprite
-			var labs:Array = "序号,缩略图,名称,型号,品类,规格,材质,颜色,单价,数量,小计".split(",");
+			var ItmLst:Sprite = new PageList();	// this is the main sprite
 			var spacs:Array = " 0,  30,  110, 200,270,340, 420,490,540,600,660".split(",");
 			var labSpr:Sprite = new Sprite();
-			for (var i:int=0; i<labs.length; i++)
-			{
-				var tt:TextField = createText(labs[i]);
-				tt.x = Number(spacs[i]);
-				labSpr.addChild(tt);
-			}
-			LHSMenu.drawStripedRect(labSpr,0,0,labSpr.width,labSpr.height,0xCCCCCC,0xC6C6C6,5,0);
-			labSpr.x = 10;
-			labSpr.y = 10;
+			labSpr.graphics.lineStyle(0, 0x333333, 1);
+			labSpr.graphics.drawRect(0, 0, 810, 32);
+			labSpr.x = 20;
+			labSpr.y = 96;
 			ItmLst.addChild(labSpr);
 			
 			var con:Sprite = new Sprite();	// container for item sprs
-			con.x = 10;
-			con.y = 10+labSpr.height;
+			con.x = labSpr.x;
+			con.y = labSpr.y+labSpr.height;
 			
 			var marg:int = 10;
 			
 			// ------ create msk and scroll bar -------------------------------
 			var msk:Sprite = new Sprite();
 			msk.graphics.beginFill(0,1);
-			msk.graphics.drawRect(0,0,labSpr.width+80,400);
+			msk.graphics.drawRect(0,0,labSpr.width+80,350);
 			msk.graphics.endFill();
-			msk.x = 10;
-			msk.y = 10+labSpr.height;
+			msk.x = labSpr.x;
+			msk.y = labSpr.y+labSpr.height;
 			con.mask = msk;
 			ItmLst.addChild(msk);
 			
 			var scrol:Sprite = new Sprite();
-			LHSMenu.drawStripedRect(scrol,0,0,marg,400,0xAAAAAA,0xACACAC,5,10);
-			scrol.x = labSpr.width+80+marg*2;
-			scrol.y = marg + labSpr.height;
+			LHSMenu.drawStripedRect(scrol,0,0,marg/2,msk.height+labSpr.height,0xAAAAAA,0xACACAC,5,10);
+			scrol.x = labSpr.x+labSpr.width+10;
+			scrol.y = labSpr.y;
 			ItmLst.addChild(scrol);
 			var bar:Sprite = new Sprite();
 			scrol.addChild(bar);
@@ -695,9 +603,9 @@
 			bar.addEventListener(MouseEvent.MOUSE_DOWN,startDragHandler);
 			stage.addEventListener(MouseEvent.MOUSE_UP,stopDragHandler);
 			
-			var totalTf:TextField = createText("总计金额： －－ 元， 产品件数：－－件");
+			var totalTf:TextField = utils.createText("总计金额： －－ 元， 产品件数：－－件");
 			totalTf.x = marg;
-			totalTf.y = 400+labSpr.height+35;
+			totalTf.y = msk.y+msk.height+20;
 			ItmLst.addChild(totalTf);
 			
 			// ----- changes to given items P ---------------------------------
@@ -733,7 +641,7 @@
 						}
 						else
 						{
-							var tf:TextField = createText(I[i][j]);
+							var tf:TextField = utils.createText(I[i][j],-1,11,0x999999);
 							tf.x = Number(spacs[j]);
 							s.addChild(tf);
 						}
@@ -744,7 +652,7 @@
 					else
 					{
 						s.graphics.lineStyle(0,0x999999);
-						s.graphics.drawRect(0,0,labSpr.width+50,s.height);
+						s.graphics.drawRect(0,0,labSpr.width,s.height);
 					}
 					s.y = yOff;
 					yOff+= s.height;
@@ -754,17 +662,16 @@
 				totalTf.htmlText = "<font size='15' >总计金额：<font size='17' color='#33AAAA' >"+totalCost+"</font> 元， 产品件数：<font size='17' color='#33AAAA' >"+P.length+"</font> 件</font>";
 				
 				bar.graphics.clear();
-				LHSMenu.drawStripedRect(bar,0,0,marg,Math.min(400,400/con.height*scrol.height),0x333355,0x373757,5,10);
+				LHSMenu.drawStripedRect(bar,0,0,scrol.width,Math.min(scrol.height,msk.height/con.height*scrol.height),0x333355,0x373757,5,10);
 			}//endfunction
 						
 			// ----- update on changes ----------------------------------------
 			function updateHandler(ev:Event):void
 			{
-				con.y = labSpr.y+labSpr.height-con.height*bar.y/scrol.height;
+				con.y = msk.y-(con.height+100)*bar.y/scrol.height;
 			}//endfunction
 			ItmLst.addEventListener(Event.ENTER_FRAME,updateHandler);
 			
-			LHSMenu.drawStripedRect(ItmLst,0,0,labSpr.width+80+marg*4,400+labSpr.height+60,0xFFFFFF,0xF6F6F6,5,10);
 			ItmLst.x = (stage.stageWidth-ItmLst.width)/2;
 			ItmLst.y = (stage.stageHeight-ItmLst.height)/2;
 			ItmLst.addChild(con);
@@ -772,25 +679,20 @@
 			//ItmLst.addChild(pageSelector);
 			
 			// ------ to close when clicked outside 
-			var coverUp:Sprite = new Sprite();
-			coverUp.graphics.beginFill(0x000000,0.8);
-			coverUp.graphics.drawRect(0,0,stage.stageWidth,stage.stageHeight);
-			coverUp.graphics.endFill();
-			addChild(coverUp);
 			addChild(ItmLst);
 			
 			function clickHandler(ev:Event):void
 			{
+				if (ItmLst.hitTestPoint(stage.mouseX, stage.mouseY))	return;
 				ItmLst.removeEventListener(Event.ENTER_FRAME,updateHandler);
 				bar.removeEventListener(MouseEvent.MOUSE_DOWN,startDragHandler);
 				stage.removeEventListener(MouseEvent.MOUSE_UP,stopDragHandler);
-				coverUp.removeEventListener(MouseEvent.CLICK,clickHandler);
-				coverUp.parent.removeChild(coverUp);
+				stage.removeEventListener(MouseEvent.MOUSE_DOWN,clickHandler);
 				ItmLst.parent.removeChild(ItmLst);
 				enableI();
 				if (callBack!=null) callBack();
 			}
-			coverUp.addEventListener(MouseEvent.CLICK,clickHandler);
+			stage.addEventListener(MouseEvent.MOUSE_DOWN,clickHandler);
 			
 			var ldr:URLLoader = new URLLoader();
 			var req:URLRequest = new URLRequest(baseUrl+"?n=api&a=scheme&c=scheme&m=info&id="+saveId+"&token="+userToken);
@@ -812,7 +714,7 @@
 				var dlBtn:Sprite = createBtn("下载");
 				dlBtn.x = labSpr.width-dlBtn.width;
 				s.addChild(dlBtn);
-								
+				
 				function clickSelHandler(ev:Event):void
 				{
 					if (dlBtn.hitTestPoint(stage.mouseX,stage.mouseY))
@@ -848,7 +750,8 @@
 				}
 				s.addEventListener(Event.REMOVED_FROM_STAGE,cleanUpHandler);
 				
-				s.y = -s.height;
+				s.x = labSpr.x;
+				s.y = labSpr.y - s.height;
 				ItmLst.addChild(s);
 				
 				return s;
@@ -864,7 +767,7 @@
 			function onComplete():void
 			{
 				var o:Object = JSON.parse(ldr.data);
-				trace("showItemsList ldr.data=" + ldr.data);
+				trace("showItemsList ldr.data=" + prnObject(o));
 				if (o.scheme.qdjson == null)	return;
 				
 				o = JSON.parse(o.scheme.qdjson);
@@ -1282,7 +1185,7 @@
 																{
 																	trace("saveIt="+saveIt);
 																	if (saveIt)
-																		saveToServer("incognito",saveToSharedObject);
+																		saveToServer("incognito");
 																	cleanUp();
 																});
 															},
@@ -1294,7 +1197,7 @@
 																	if (saveIt)
 																	{
 																		saveId = null;		
-																		saveToServer("incognito",saveToSharedObject);
+																		saveToServer("incognito");
 																	}
 																	cleanUp();
 																});
@@ -1309,7 +1212,8 @@
 																					var ldr:URLLoader = new URLLoader();
 																					function onComplete(ev:Event):void
 																					{
-																						trace("share response: "+ldr.data);
+																						trace("share response: " + ldr.data);
+																						properties.isPublic = true;
 																					}//endfunction
 																					ldr.addEventListener(Event.COMPLETE, onComplete);
 																					ldr.load(new URLRequest(baseUrl+"?n=api&a=scheme&c=scheme&m=share&id="+saveId+"&token="+userToken));
@@ -1338,7 +1242,7 @@
 				labels.splice(3, 2);
 				fns.splice(3, 2);
 			}
-			var s:Sprite = utils.createChoices(	"文件",labels,fns);
+			var s:Sprite = utils.createNoTitleChoices(labels,fns);
 			function cleanUp():void 
 			{	// function to remove this menu cleanly
 				if (s.parent != null) s.parent.removeChild(s);
@@ -1353,7 +1257,7 @@
 			}
 			stage.addEventListener(MouseEvent.MOUSE_DOWN, chkCloseHandler);
 			
-			s.filters = [new DropShadowFilter(3, 45, 0x000000)];
+			s.filters = [new DropShadowFilter(1, 45, 0x000000, 1, 2,2)];
 			addChild(s);
 			return s;
 		}//endfunction
@@ -1372,8 +1276,7 @@
 				updateCanvas();
 			}
 			var s:Sprite = 
-			utils.createChoices("设背景图",
-								Vector.<String>(["设为页面背景图","设为空间背景图","设为全部背景图"]),
+			utils.createNoTitleChoices(Vector.<String>(["设为页面背景图","设为空间背景图","设为全部背景图"]),
 								Vector.<Function>([	function():void {setTargetAsBg(0); cleanUp();},
 													function():void {setTargetAsBg(1); cleanUp();},
 													function():void {setTargetAsBg(2); cleanUp();}]),130);
@@ -1389,7 +1292,7 @@
 			stage.addEventListener(MouseEvent.MOUSE_DOWN, chkCloseHandler);
 			s.y = main.B.y - s.height;
 			s.x = main.B.r.x+main.B.x;
-			s.filters = [new DropShadowFilter(3, 45, 0x000000)];
+			s.filters = [new DropShadowFilter(1, 45, 0x000000, 1, 2,2)];
 			addChild(s);
 		}//endfunction
 		
@@ -1400,58 +1303,117 @@
 		{
 			var enableI:Function = disableInterractions();
 			
-			var Btns:Vector.<Sprite> = new Vector.<Sprite>();
-		
 			// --------------------------------------------------------------------
-			function makeBtn(ico:DisplayObject,txt:String):void
+			function makeBtn(data:Object):Sprite
 			{
-				var btn:Sprite = new Sprite();
-				btn.graphics.beginFill(0xFFFFFF,1);
-				btn.graphics.drawRoundRect(0,0,100,100,10);
-				btn.graphics.endFill();
+				var ico:Bitmap = new Bitmap(new BitmapData(80,80,false,0xFF0000));
+				
+				try {
+				if (data.b64thumb != null)
+				{
+					var b64dec:Base64Decoder = new Base64Decoder();
+					b64dec.decode(data.b64thumb);
+					var ldr:Loader = new Loader();
+					function imgLoaded(ev:Event):void	
+					{
+						ldr.contentLoaderInfo.removeEventListener(Event.COMPLETE, imgLoaded);
+						ico.bitmapData = (Bitmap)(ldr.content).bitmapData;
+						ico.width = ico.height = 80;
+					}
+					ldr.loadBytes(b64dec.toByteArray());
+					ldr.contentLoaderInfo.addEventListener(Event.COMPLETE, imgLoaded);
+				}
+				} 
+				catch (e:Error)
+				{
+					trace("ERROR DECODING b64thumb!!");
+				}
+				
+				var btn:MovieClip = new SaveBox();
+				if (data.properties.isPublic == true)	btn.gotoAndStop(2);
+				else 									btn.gotoAndStop(1);
 				ico.x = (btn.width-ico.width)/2;
 				ico.y = (btn.height-ico.height)/2;
 				btn.addChild(ico);
-				var tf:TextField = new TextField();
-				tf.autoSize = "left";
-				tf.wordWrap = false;
-				var tff:TextFormat = tf.defaultTextFormat;
-				tff.color = 0x000000;
-				tff.size = 14;
-				tf.defaultTextFormat = tff;
-				tf.text = txt;
+				var tf:TextField = 
+				utils.createText("<font size='15'><b>" + data.properties.name + "</b></font>\n" +
+								"<font size='11'>风格 ： " + data.properties.style.split("|").pop() + "    类型 ： " + data.properties.type.split("|").pop() + "\n" +
+								"最后编辑日期 ： "+data.properties.lastModify+"</font>");
 				tf.y = (btn.height-tf.height)/2;
-				tf.x = btn.width+5;
+				tf.x = 30;
 				btn.addChild(tf);
-				Btns.push(btn);
-			}
+				btn.mouseChildren = false;
+				return btn;
+			}//endfunction
 			
 			// --------------------------------------------------------------------
-			function createMenu(projects:Array):void
+			function createMenu(projects:Array,Btns:Vector.<Sprite>):void
 			{
-				var men:Sprite = new IconsMenu(Btns, 5, 1, function(idx:int):void // creates icons menu
-				{	// options clicked callback
+				var men = new PageOpen();
+				var con:Sprite = new Sprite();
+				con.buttonMode = true;
+				con.x = 15;
+				con.y = 50;
+				men.addChild(con);
+				
+				// ----- create page selectors
+				var pageSel:Sprite = new Sprite();
+				pageSel.buttonMode = true;
+				pageSel.mouseChildren = false;
+				
+				function gotoPage(p:int = 0):void
+				{
+					var py:int = 0;
+					while (con.numChildren > 0) con.removeChildAt(0);
+					for (var i:int=Math.min(p*4, Btns.length); i<Math.min((p+1)*4,Btns.length); i++)
+					{
+						Btns[i].y = py;
+						py += Btns[i].height+5;
+						con.addChild(Btns[i]);
+						Btns[i].alpha = 0;
+						TweenLite.to(Btns[i], 0.5, {alpha:1, delay:py/1000});
+					}
+					
+					while (pageSel.numChildren > 0) pageSel.removeChildAt(0);
+					for (i=0; i<Btns.length/4; i++)
+					{
+						var tf:TextField = null;
+						if (i==p)
+						{
+							tf = utils.createText((i + 1) + "", -1, 12, 0xFFFFFF);
+							tf.background = true;
+							tf.backgroundColor = 0x999999;
+						}
+						else
+							tf = utils.createText((i + 1) + "", -1, 12, 0x999999);
+						tf.x = i * 20;
+						pageSel.addChild(tf);
+					}
+					pageSel.x = (men.width - pageSel.width) / 2;
+					pageSel.y = men.height - pageSel.height - 30;
+					men.addChild(pageSel);
+				}
+				
+				gotoPage(0);
+				
+				// ----- file choices when selected	
+				function showFileChoices(idx:int):void
+				{
+					stage.removeEventListener(MouseEvent.MOUSE_DOWN, clkHandler);
 					men.visible = false;
 					var choi:Sprite = 
-					utils.createChoices("文档", 
-											Vector.<String>(["打开","删除","取消"]), 
-											Vector.<Function>([function():void 
+					utils.createNoTitleChoices(Vector.<String>(["打开","删除","取消"]), 
+											Vector.<Function>([
+											function():void 			// OPEN FILE
 											{
-												var so:SharedObject = SharedObject.getLocal("ImageTool");
-												var saveDat:Array = so.data.savedData;	// name,tmbByteArr,datastring
 												saveId = projects[idx].id;
 												trace("open "+saveId);
 												restoreFromData(projects[idx].data);	// imports the data string
 												closeMen();
 												choi.parent.removeChild(choi);
 											},
-											function():void 
+											function():void 			// DELETE FILE
 											{
-												var so:SharedObject = SharedObject.getLocal("ImageTool");
-												var savDat:Array = so.data.savedData;	// name,tmbByteArr,datastring
-												savDat.splice(idx * 3, 3);	// deletes the data
-												so.data.savedData = savDat;
-												so.flush();
 												closeMen();
 												var ldr:URLLoader = new URLLoader();
 												function onComplete(ev:Event):void
@@ -1461,32 +1423,47 @@
 												}
 												ldr.addEventListener(Event.COMPLETE, onComplete);
 												
-												ldr.load(new URLRequest(baseUrl + "?n=api&a=scheme&c=scheme&m=del&idx=" + projects[idx].id + "&token=" + userToken));
+												ldr.load(new URLRequest(baseUrl + "?n=api&a=scheme&c=scheme&m=del&id=" + projects[idx].id + "&token=" + userToken));
 												choi.parent.removeChild(choi);
 											},
-											function():void 
+											function():void 			// CANCEL
 											{
 												men.visible = true;
 												choi.parent.removeChild(choi);
+												stage.addEventListener(MouseEvent.MOUSE_DOWN, clkHandler);
 											}]), 100);
 					choi.x = (stage.stageWidth - choi.width) / 2;
 					choi.y = (stage.stageHeight - choi.height) / 2;
 					addChild(choi);
-					
-				});
+				}
+				
 				function closeMen():void 
 				{
-					stage.removeEventListener(MouseEvent.MOUSE_DOWN, chkCloseHandler);
+					stage.removeEventListener(MouseEvent.MOUSE_DOWN, clkHandler);
 					enableI();
 					if (men.parent != null) 
 						men.parent.removeChild(men);
 				}
-				function chkCloseHandler(ev:Event):void
+				function clkHandler(ev:Event):void
 				{
-					if (men.hitTestPoint(stage.mouseX, stage.mouseY))	return;
-					closeMen();
+					var mx:int = stage.mouseX;
+					var my:int = stage.mouseY;
+					if (men.hitTestPoint(mx, my)==false)
+						closeMen();
+					else if (pageSel.hitTestPoint(mx, my))
+					{
+						for (var i:int = 0; i < pageSel.numChildren; i++)
+							if (pageSel.getChildAt(i).hitTestPoint(mx, my))
+								gotoPage(i);
+					}
+					else if (con.hitTestPoint(mx, my))
+					{
+						for (i = 0; i < con.numChildren; i++)
+							if (con.getChildAt(i).hitTestPoint(mx, my))
+								showFileChoices(i);
+					}
 				}
-				stage.addEventListener(MouseEvent.MOUSE_DOWN, chkCloseHandler);
+				stage.addEventListener(MouseEvent.MOUSE_DOWN, clkHandler);
 				men.x = (stage.stageWidth - men.width) / 2;
 				men.y = (stage.stageHeight - men.height) / 2;
 				addChild(men);
@@ -1497,43 +1474,14 @@
 			{
 				var projects:Array = JSON.parse(ldr.data).projects;
 				trace("listSavedFiles:\n"+prnObject(projects));
-					
-				var so:SharedObject = SharedObject.getLocal("ImageTool");
-				var saveDat:Array = so.data.savedData;	// name,tmbByteArr,datastring
-				if (saveDat==null)	saveDat = [];
 				
-				var idx:int=0;
-				function loadNext():void
+				if (projects.length > 0)
 				{
-					function _andNext(ico:DisplayObject):void
-					{
-						makeBtn(ico,projects[idx].name);	// create button with icon and label
-						idx++;
-						if (idx>=projects.length)
-							createMenu(projects);
-						else
-							loadNext();
-					}//endfunction
-					
-					if (saveDat.length > idx * 3 + 1)
-					{
-						var ldr:Loader = new Loader();
-						function imgLoaded(ev:Event):void	
-						{
-							ldr.contentLoaderInfo.removeEventListener(Event.COMPLETE, imgLoaded);
-							_andNext(ldr.content);
-						}
-						ldr.loadBytes(saveDat[idx*3+1] as ByteArray);
-						ldr.contentLoaderInfo.addEventListener(Event.COMPLETE, imgLoaded);
-					}
-					else
-					{
-						_andNext(new Bitmap(new BitmapData(100,100,false,0xFF0000)));
-					}
-				}//endfunction
-				
-				if (projects.length > idx)	
-					loadNext();		// strat load and show savefiles
+					var Btns:Vector.<Sprite> = new Vector.<Sprite>();
+					for (var i:int=0; i<projects.length; i++)
+						Btns.push(makeBtn(JSON.parse(projects[i].data)));	// create button with icon and label
+					createMenu(projects, Btns);
+				}
 				else	// if no save files 
 				{
 					var men:Sprite = utils.createChoices("没有文档", 
@@ -1706,9 +1654,9 @@
 			}//endfunction
 			
 			function onProgress(evt:ProgressEvent):void {trace("Loaded " + evt.bytesLoaded + " of " + evt.bytesTotal + " bytes.");} 
-			function onCancel(evt:Event):void 			{trace("The browse request was canceled by the user.");} 
-			function onIOError(evt:IOErrorEvent):void 	{trace("There was an IO Error.");}
-			function onSecurityError(evt:Event):void  	{trace("There was a security error.");}
+			function onCancel(evt:Event):void 			{ trace("The browse request was canceled by the user."); enableI(); } 
+			function onIOError(evt:IOErrorEvent):void 	{ trace("There was an IO Error.");	enableI(); }
+			function onSecurityError(evt:Event):void  	{ trace("There was a security error."); enableI();}
 		}//endfunction
 		
 		//=============================================================================
@@ -1813,48 +1761,125 @@
 		}//endfunction
 		
 		//=============================================================================
-		// start pic transform and move, skew if clicked
+		// do menu functions if top/bottom menu buttons clicked 
 		//=============================================================================
-		private function mouseDownHandler(ev:Event=null):void
+		private function menuAreaClicked():Boolean
 		{
-			var mX:int = canvas.stage.mouseX;
-			var mY:int = canvas.stage.mouseY;
+			var mx:int = stage.mouseX;
+			var my:int = stage.mouseY;
 			
-			// ----- return if hits UI elements -------------------------------
-			if (disableClick ||
-				main.T.hitTestPoint(mX, mY) || 
-				main.B.hitTestPoint(mX, mY) || 
-				main.L.hitTestPoint(mX, mY) || 
-				main.R.hitTestPoint(mX, mY) || 
-				sliderBar.hitTestPoint(mX, mY))
-				return;
-			
-			if (arrow!=null && arrow.canvas.hitTestPoint(mX,mY)) arrow.onMouseDown();
-			
-			mouseDownT = getTimer();
-			prevMousePt = new Point(canvas.mouseX, canvas.mouseY);
-			var page:Page = LHS.selected;
-			
-			// ----- find text being clicked ----------------------------------
-			for (var i:int=page.Txts.length-1; i>-1; i--)
-				if (page.Txts[i].hitTestPoint(mX, mY))
-				{
-					editText(page.Txts[i]);
-					return;
-				}
-			
-			if (target == null) return;
-			
-			// ----- if pics top bar functions clicked ------------------------
-			var ib:MovieClip = main.P.l as MovieClip;
-			if (ib.hitTestPoint(mX, mY))
+			// ----- chk if top left buttons pressed
+			if (main.T.l.hitTestPoint(mx,my))
 			{
-				if (ib.b1.visible && ib.b1.hitTestPoint(mX, mY))		// TOP LAYER
+				if (main.T.l.b1.hitTestPoint(mx,my))		// show file menu
+				{
+					var fo:Sprite = showFileOptions();
+					fo.x = main.T.l.b1.x+main.T.l.x+main.T.x;
+					fo.y = main.T.l.b1.y+main.T.l.b1.height;
+					//showSaveLoad(function():void {disableClick=false;});
+				}
+				else if (main.T.l.b2.hitTestPoint(mx,my))	// details
+				{
+					showProjectProperties();
+				}
+				else if (main.T.l.b3.hitTestPoint(mx,my))	// 
+				{
+					showItemsList();
+				}
+				else if (main.T.l.b4.hitTestPoint(mx,my))	// 
+				{
+					showSlideShow();
+				}
+				else if (main.T.l.b5.hitTestPoint(mx,my))	// 
+				{
+					if (stage.displayState!=StageDisplayState.FULL_SCREEN)
+						stage.displayState = StageDisplayState.FULL_SCREEN;
+					else
+						stage.displayState = StageDisplayState.NORMAL;
+				}
+				else if (main.T.l.b6.hitTestPoint(mx,my))	// undo
+				{	
+					trace("undo");
+					if (undoStk.length>1)
+					{
+						redoStk.push(undoStk.pop());
+						restoreFromData(undoStk[undoStk.length-1]);
+					}
+				}
+				else if (main.T.l.b7.hitTestPoint(mx,my))	// redo
+				{
+					trace("redo");
+					if (redoStk.length>0)
+					{
+						undoStk.push(redoStk.pop());
+						restoreFromData(undoStk[undoStk.length-1]);
+					}
+				}
+				return true;
+			}
+			
+			// ----- chk if top right buttons pressed
+			if (main.T.r.hitTestPoint(mx,my))
+			{
+				if (main.T.r.b1.hitTestPoint(mx,my))		// add text
+				{
+					addText();
+				}
+				else if (main.T.r.b2.hitTestPoint(stage.mouseX, stage.mouseY))	// add colored squares
+				{
+					var hexColor:String = "#12345678";
+					var img:Image = new Image(hexColor, hexColor, new BitmapData(100, 100, false, parseInt(hexColor.split("#")[1],16)));
+					LHS.selected.Pics.push(img);					// add image to Page
+					
+					mouseMoveFn = function():void 	// start drag
+					{
+						img.centerTo(canvas.mouseX,canvas.mouseY);
+					}
+					
+					updateCanvas();
+				}
+				else if (main.T.r.b4.hitTestPoint(stage.mouseX, stage.mouseY))	// add arrow
+				{
+					trace("add arrow");
+					arrow = new Arrow();
+					LHS.selected.Arrows.push(arrow);					// add image to Page
+					updateCanvas();
+					var s:String = getCurState();
+					if (undoStk[undoStk.length-1]!=s) 
+					{
+						trace("push curState="+s);
+						undoStk.push(s);
+						updatePageImage();
+					}
+				}
+				return true;
+			}
+			
+			// ----- chk if bottom right buttons pressed
+			if (main.B.r.hitTestPoint(mx,my))
+			{
+				if (main.B.r.b1.hitTestPoint(mx,my))		// set bg
+				{
+					showSetAsBackground();
+				}
+				else if (main.B.r.b2.hitTestPoint(mx,my))	// upload user image
+				{
+					userSelectAndUploadImage();
+				}
+				return true;
+			}
+			
+			// ----- if pics controls clicked
+			if (main.P.l.visible && target!=null && main.P.l.hitTestPoint(mx,my))
+			{
+				var ib:MovieClip = main.P.l as MovieClip;
+				var page:Page = LHS.selected;
+				if (ib.b1.visible && ib.b1.hitTestPoint(mx,my))		// TOP LAYER
 				{
 					page.Pics.splice(page.Pics.indexOf(target), 1);
 					page.Pics.push(target);
 				}
-				else if (ib.b2.visible && ib.b2.hitTestPoint(mX, mY))	// MOVE UP
+				else if (ib.b2.visible && ib.b2.hitTestPoint(mx,my))	// MOVE UP
 				{
 					if (page.Pics.indexOf(target)<page.Pics.length-1)
 					{
@@ -1863,7 +1888,7 @@
 						page.Pics[uidx+1] = target;
 					}
 				}
-				else if (ib.b3.visible && ib.b3.hitTestPoint(mX, mY))	// MOVE DOWN
+				else if (ib.b3.visible && ib.b3.hitTestPoint(mx,my))	// MOVE DOWN
 				{
 					if (page.Pics.indexOf(target)>0)
 					{
@@ -1872,14 +1897,14 @@
 						page.Pics[didx-1] = target;
 					}
 				}
-				else if (ib.b4.visible && ib.b4.hitTestPoint(mX, mY))	// BOTTOM LAYER
+				else if (ib.b4.visible && ib.b4.hitTestPoint(mx,my))	// BOTTOM LAYER
 				{
 					page.Pics.splice(page.Pics.indexOf(target), 1);
 					page.Pics.unshift(target);
 				}
-				else if (ib.b5.visible && ib.b5.hitTestPoint(mX, mY))	// GROUP
+				else if (ib.b5.visible && ib.b5.hitTestPoint(mx,my))	// GROUP
 				{
-					if (page.Pics.indexOf(target)==-1)	// ----- group pics not in page
+					if (target is GroupImage && page.Pics.indexOf(target)==-1)	// ----- group pics not in page
 					{
 						var I:Vector.<Image> = (GroupImage)(target).Images;
 						var gidx:int = 0;
@@ -1892,27 +1917,27 @@
 						page.Pics.splice(gidx, 0, target);	// add grp pic to page
 					}
 				}
-				else if (ib.b6.visible && ib.b6.hitTestPoint(mX, mY))	// UNGROUP
+				else if (ib.b6.visible && ib.b6.hitTestPoint(mx,my))	// UNGROUP
 				{
 					if (target is GroupImage && page.Pics.indexOf(target) != -1)	// grp pic in page
 					{
-						var gidx:int = page.Pics.indexOf(target);
+						gidx = page.Pics.indexOf(target);
 						page.Pics.splice(gidx, 1);			// remove grp pic
 						I = (GroupImage)(target).Images;
 						for (k = I.length - 1; k > -1; k-- )	// add children pics
 							page.Pics.splice(gidx, 0, I[k]);
 					}
 				}
-				else if (ib.b7.visible && ib.b7.hitTestPoint(mX, mY))	// TRASH
+				else if (ib.b7.visible && ib.b7.hitTestPoint(mx,my))	// TRASH
 				{
 					page.Pics.splice(page.Pics.indexOf(target),1);
 					target = null;
 				}
-				else if (ib.b8.visible && ib.b8.hitTestPoint(mX, mY))	// LOCK
+				else if (ib.b8.visible && ib.b8.hitTestPoint(mx,my))	// LOCK
 				{
 					
 				}
-				else if (ib.b9.visible && ib.b9.hitTestPoint(mX, mY))	// CROP
+				else if (ib.b9.visible && ib.b9.hitTestPoint(mx,my))	// CROP
 				{
 					if (!(target is CropImage))
 					{
@@ -1923,7 +1948,42 @@
 					var enableI:Function = disableInterractions();
 					(CropImage)(target).doCropUI(canvas,function():void {enableI(); updateCanvas();});
 				}
+				return true;
 			}
+			
+			return false;
+		}//endfunction
+		
+		//=============================================================================
+		// start pic transform and move, skew if clicked
+		//=============================================================================
+		private function mouseDownHandler(ev:Event=null):void
+		{
+			var mX:int = canvas.stage.mouseX;
+			var mY:int = canvas.stage.mouseY;
+			
+			// ----- return if hits UI elements -------------------------------
+			if (disableClick>0 ||menuAreaClicked())	return;
+			
+			if (arrow != null && arrow.canvas.hitTestPoint(mX, mY)) arrow.onMouseDown();
+			
+			var page:Page = LHS.selected;
+			
+			// ----- find text being clicked ----------------------------------
+			for (var i:int=page.Txts.length-1; i>-1; i--)
+				if (page.Txts[i].hitTestPoint(mX, mY))
+				{
+					editText(page.Txts[i]);
+					target = null;
+					if (picResizeUI.parent!=null)
+						picResizeUI.parent.removeChild(picResizeUI);
+					return;
+				}
+				
+			mouseDownT = getTimer();
+			prevMousePt = new Point(canvas.mouseX, canvas.mouseY);
+			
+			if (target == null) return;
 			
 			// ----- if pic controls clicked ----------------------------------
 			var csr:MovieClip = (MovieClip)(picResizeUI.getChildAt(picResizeUI.numChildren - 1));	// the follow cursor
@@ -2065,10 +2125,10 @@
 			}
 			
 			// ----- position picResizeUI mouse cursor
+			var csr:MovieClip = (MovieClip)(picResizeUI.getChildAt(picResizeUI.numChildren - 1));
 			if (target != null)
 			{
 				var curPt:Point = new Point(canvas.mouseX, canvas.mouseY);
-				var csr:MovieClip = (MovieClip)(picResizeUI.getChildAt(picResizeUI.numChildren - 1));
 				if (pointInPoly(curPt, target.Corners))
 				{
 					csr.visible = true;
@@ -2105,7 +2165,7 @@
 				}
 				if (csr.visible)
 				{
-					if (disableClick==false) Mouse.hide();
+					if (disableClick<=0) Mouse.hide();
 					csr.x = picResizeUI.mouseX;
 					csr.y = picResizeUI.mouseY;
 					if (csr.currentFrame==1)	csr.rotation = 0;
@@ -2122,7 +2182,11 @@
 					csr.y = 0;
 				}
 			}
-			if (picResizeUI.parent == null) Mouse.show();
+			if (disableClick>0 || picResizeUI.parent == null) 
+			{
+				csr.visible = false;
+				Mouse.show();
+			}
 		}//endfunction
 		
 		//=============================================================================
@@ -2135,25 +2199,19 @@
 			var mY:int = stage.mouseY;
 			
 			// ----- return if hits UI elements -------------------------------
-			if (disableClick ||
-				main.T.hitTestPoint(mX, mY) || 
-				main.B.hitTestPoint(mX, mY) || 
-				main.L.hitTestPoint(mX, mY) || 
-				main.R.hitTestPoint(mX, mY) || 
-				sliderBar.hitTestPoint(mX, mY))
+			if (disableClick>0)
 				return;
 				
 			main.graphics.clear();
-			mouseMoveFn = null;
 			if (mouseUpFn!=null) mouseUpFn();
 			var page:Page = LHS.selected;
 			
 			var prevTarg:Image = target;
-			target = null;		// reset target
+			target = null;
 			
 			// ----- find all images under cursor
 			var curMousePt:Point = new Point(canvas.mouseX, canvas.mouseY);
-			if (prevMousePt != null)
+			if (mouseMoveFn==null && prevMousePt != null)
 			{
 				var AllImgs:Vector.<Image> = new Vector.<Image>();
 				var selPoly:Vector.<Point> = 
@@ -2179,7 +2237,15 @@
 					target = AllImgs[0];
 			}
 			
-			trace("target="+target);
+			mouseMoveFn = null;
+			
+			// ----- chk text being clicked ----------------------------------
+			for (var i:int=page.Txts.length-1; i>-1; i--)
+				if (page.Txts[i].hitTestPoint(mX, mY))
+				{
+					target = null;
+					return;
+				}
 			
 			// ----- chk if arrow or color square clicked ---------------------
 			if (getTimer() - mouseDownT < 250)
@@ -2187,7 +2253,7 @@
 				trace("short click!");
 				// ----- find arrow being clicked ---------------------------------
 				arrow = null;
-				for (var i:int=page.Arrows.length-1; i>-1; i--)
+				for (i=page.Arrows.length-1; i>-1; i--)
 					if (page.Arrows[i].canvas.hitTestPoint(mX, mY,true))
 					{
 						arrow = page.Arrows[i];
@@ -2202,14 +2268,14 @@
 				}
 				
 				// ----- show color selector if targ is color square --------------
-				if (target!=null && target.url!=null && target.url.charAt(0) == "#" && page.Pics.indexOf(target)!=-1 && prevTarg == target)
+				if (target!=null && target.url!=null && target.url.charAt(0) == "#" && prevTarg == target)
 					editColorSquare(target);
 			}
 			
 			// ----- check and add undo
 			if (!LHS.canvas.hitTestPoint(stage.mouseX,stage.mouseY) && 
 				(RHS==null || !RHS.canvas.hitTestPoint(stage.mouseX,stage.mouseY)) &&
-				!topBar.hitTestPoint(stage.mouseX,stage.mouseY))
+				!main.T.hitTestPoint(stage.mouseX,stage.mouseY))
 			{
 				var s:String = getCurState();
 				if (undoStk[undoStk.length-1]!=s) 
@@ -2361,15 +2427,83 @@
 		//=============================================================================
 		private function keyDownHandler(ev:KeyboardEvent):void
 		{
-			if (ev.keyCode==16)	keyShift = true;
+			if (ev.keyCode==16)		keyShift = true;
+			if (ev.keyCode==17)		keyControl = true;
 		}//endfunction
 		
 		//=============================================================================
-		// 
+		// hot keys trigger
 		//=============================================================================
 		private function keyUpHandler(ev:KeyboardEvent):void
 		{
-			if (ev.keyCode==16)	keyShift = false;
+			if (ev.keyCode==16)		keyShift = false;
+			if (ev.keyCode==17)		keyControl = false;
+			
+			var page:Page = LHS.selected;
+			
+			if (keyControl)
+			{
+				if (ev.keyCode==90)		// ctrl Z
+				{
+					trace("keyup undo");
+					if (undoStk.length>1)
+					{
+						redoStk.push(undoStk.pop());
+						restoreFromData(undoStk[undoStk.length-1]);
+					}
+				}
+				if (ev.keyCode==89)		// ctrl Y
+				{
+					trace("keyup redo");
+					if (redoStk.length>0)
+					{
+						undoStk.push(redoStk.pop());
+						restoreFromData(undoStk[undoStk.length-1]);
+					}
+				}
+			}
+			
+			if (target!=null)
+			{
+				if (ev.keyCode==8 || ev.keyCode==46)	// delete
+				{
+					trace("keyup delete");
+					if (page.Pics.indexOf(target)!=-1)
+						LHS.selected.Pics.splice(LHS.Pages.indexOf(target),1);
+					target = null;
+					updateCanvas();
+				}
+				else if (keyControl && ev.keyCode==71)	// ctrl G
+				{
+					if (keyShift)		// ctrl shft G => ungroup
+					{
+						if (target is GroupImage && page.Pics.indexOf(target) != -1)	// grp pic in page
+						{
+							var gidx:int = page.Pics.indexOf(target);
+							page.Pics.splice(gidx, 1);			// remove grp pic
+							I = (GroupImage)(target).Images;
+							for (var k:int = I.length - 1; k > -1; k-- )	// add children pics
+								page.Pics.splice(gidx, 0, I[k]);
+						}
+					}
+					else
+					{
+						if (target is GroupImage && page.Pics.indexOf(target)==-1)	// ----- group pics not in page
+						{
+							var I:Vector.<Image> = (GroupImage)(target).Images;
+							gidx = 0;
+							for (k = I.length - 1; k > -1; k-- )
+							{
+								if (gidx < page.Pics.indexOf(I[k]))	// remove children pics from page
+									gidx = page.Pics.indexOf(I[k]);
+								page.Pics.splice(page.Pics.indexOf(I[k]), 1);
+							}
+							page.Pics.splice(gidx, 0, target);	// add grp pic to page
+						}
+					}
+				}
+			}
+			
 		}//endfunction
 		
 		//=============================================================================
@@ -2399,6 +2533,7 @@
 					o.Pages = (LHSMenu)(v).Pages;
 					o.Spaces = (LHSMenu)(v).Spaces;
 					o.properties = (LHSMenu)(v).projProperties;
+					o.b64thumb = (LHSMenu)(v).b64thumb;
 					return o;
 				}
 				else if (v is Space)
@@ -2681,35 +2816,6 @@
 		}//endfunction
 		
 		//=============================================================================
-		// write data to SharedObject LOCALLY
-		//=============================================================================
-		public function saveToSharedObject():void
-		{
-			var bmd:BitmapData = generateSaveThumb();
-			var jpgEnc:JPGEncoder = new JPGEncoder(80);
-			var ba:ByteArray = jpgEnc.encode(bmd);
-			var M:Array = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-			var dat:Date = new Date();
-			
-			var so:SharedObject = SharedObject.getLocal("ImageTool");
-			var saveDat:Array = so.data.savedData;	// name,tmbByteArr,datastring
-			if (saveDat==null) saveDat = [];
-			for (var i:int=saveDat.length-1; i>-1; i-=3)
-			{
-				if (JSON.parse(saveDat[i]).saveId==saveId)
-					saveDat.splice(i-2,3);
-			}
-			var saveName:String = 	properties.name + "\n" + 
-									properties.sheng.split("|")[1] +" " + properties.shi.split("|")[1] + " " + properties.qu.split("|")[1]+"\n"+
-									dat.date + " " + M[dat.month] + " " + dat.fullYear;
-			saveDat.unshift(saveName , ba , getCurState());
-			if (saveDat.length>20*3) saveDat = saveDat.slice(0,20*3);
-			so.data.savedData = saveDat;
-			so.flush();
-			
-		}//endfunction
-		
-		//=============================================================================
 		// write data to server, and get saveId from server return
 		//=============================================================================
 		public function sendPageImagesToServer(callBack:Function = null):void
@@ -2759,6 +2865,17 @@
 		//=============================================================================
 		public function saveToServer(nam:String="incognito",callBack:Function=null):void
 		{
+			// ----- generate save thumb in base64
+			var bmd:BitmapData = new BitmapData(80,80,false,0xFFFFFF);
+			drawCanvasThumb(bmd);
+			var jpgEnc:JPGEncoder = new JPGEncoder(80);
+			var ba:ByteArray = jpgEnc.encode(bmd);
+			var b64enc:Base64Encoder = new Base64Encoder();
+			b64enc.encodeBytes(jpgEnc.encode(bmd));
+			LHS.b64thumb = b64enc.toString();
+			trace("saveToServer thumb:"+LHS.b64thumb);
+			
+			// ----- construct save request
 			var dat:Date = new Date();
 			var M:Array = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 			
@@ -2775,10 +2892,12 @@
 			vars.name = properties.name;// +"\n" + properties.sheng.split("|")[1] +" " + properties.shi.split("|")[1] + " " + properties.qu.split("|")[1] +"\n" + dat.date + " " + M[dat.month] + " " + dat.fullYear;
 			vars.scale= "$:3";
 			vars.classids= "1,2,3";
+			
 			//prn(getCurState());
 			vars.json = getCurState();
 			req.data = vars;
-		
+			
+			// ----- send data to server
 			function onComplete(ev:Event):void
 			{
 				var o:Object = JSON.parse(ldr.data);
@@ -2876,11 +2995,6 @@
 				tf.x = canvas.mouseX;
 				tf.y = canvas.mouseY;
 			} 
-			
-			mouseUpFn = function():void
-			{
-				mouseUpFn = null;
-			}
 			
 			LHS.selected.Txts.push(tf);
 			return tf;
@@ -3184,22 +3298,6 @@
 			s.addEventListener(MouseEvent.CLICK, clickHandler);
 			s.filters = [new DropShadowFilter(1,45,0x000000,1,4,4,1)];
 			return s;
-		}//endfunction
-		
-		//=============================================================================
-		// generates thumb for the save load menu
-		//=============================================================================
-		public function generateSaveThumb():BitmapData
-		{
-			var n:int = LHS.Pages.length;
-			if (n>5) n=5;
-			var bmd:BitmapData = new BitmapData(100,100,false,0xFFFFFF);
-			for (var i:int=0; i<LHS.Pages.length; i++)
-			{
-				updateCanvas();
-				drawCanvasThumb(bmd);
-			}
-			return bmd;	
 		}//endfunction
 		
 		//=============================================================================
@@ -3607,6 +3705,7 @@ class ProjProperties
 	public var shi:String = "---";
 	public var qu:String = "---";
 	public var form:String = "4:3";
+	public var isPublic:Boolean = false;
 	
 	public var lastModify:String = "";
 	
@@ -3640,6 +3739,7 @@ class ProjProperties
 		p.qu = qu;
 		p.form = form;
 		p.lastModify = lastModify;
+		p.isPublic = isPublic;
 		return p;
 	}
 }//endfunction
@@ -3651,6 +3751,7 @@ class LHSMenu
 	public var Pages:Vector.<Page> = null;		// 
 	public var selected:Page = null;
 	public var projProperties:ProjProperties = null;
+	public var b64thumb:String = null;
 	
 	private var marg:int = 10;
 	private var bw:int = 120;
@@ -3658,6 +3759,7 @@ class LHSMenu
 	private var msk:Sprite = null;
 	private var con:Sprite = null;				// containing all the btns
 	private var scroll:Sprite = null;
+	private var pageNumTxt:TextField = null;
 	
 	private var createSpaceBtn:Sprite = null;
 	
@@ -3687,17 +3789,16 @@ class LHSMenu
 		canvas.addChild(msk);
 		con.mask = msk;
 		
+		pageNumTxt = PPTool.utils.createText("1/1");
+		canvas.addChild(pageNumTxt);
+		
 		scroll = new Sprite();					// scrollbar for 
 		canvas.addChild(scroll);
 		scroll.addChild(new Sprite());
 		(Sprite)(scroll.getChildAt(0)).buttonMode = true;
 		
-		createSpaceBtn = new Sprite();			// btn to create new space
-		drawStripedRect(createSpaceBtn,0,0,120,120,0xEAEAEA,0xE9E9E9);
-		var ico:Sprite = new IcoNewPage();
-		ico.x = (createSpaceBtn.width-ico.width)/2;
-		ico.y = (createSpaceBtn.height-ico.height)/2;
-		createSpaceBtn.addChild(ico);
+		createSpaceBtn = new IcoNewPage();
+		createSpaceBtn.buttonMode = true;
 		
 		canvas.addEventListener(Event.ENTER_FRAME,enterFrameHandler);
 		canvas.addEventListener(MouseEvent.MOUSE_DOWN,mouseDownHandler);
@@ -3788,6 +3889,7 @@ class LHSMenu
 			while (con.numChildren>Spaces.length) con.removeChildAt(con.numChildren-1);
 			
 			// the make new space btn
+			createSpaceBtn.x = (con.width - createSpaceBtn.width) / 2;
 			createSpaceBtn.y = ppy;
 			con.addChild(createSpaceBtn);
 			resize(msk.height+marg*2);	// to refresh scrollbar
@@ -3921,13 +4023,14 @@ class LHSMenu
 		{
 			space = new Space();
 			Spaces.push(space);
+			pageNumTxt.text = (Pages.indexOf(selected) + 1) + "/" + Pages.length;
 			return;
 		}
 		// ----- allow scrollbar dragging -------------------------
 		if (scroll.getChildAt(0).hitTestPoint(mx,my))
 		{
 			dragging = scroll.getChildAt(0);
-			(Sprite)(dragging).startDrag(false,new Rectangle(0,0,0,msk.height-dragging.height));
+			(Sprite)(dragging).startDrag(false, new Rectangle(0, 0, 0, msk.height - dragging.height));
 			return;
 		}
 		// ----- clicked on page thumb ----------------------------
@@ -3963,11 +4066,13 @@ class LHSMenu
 						spc.dragPage(nsel);
 						dragging = nsel.thumb;
 					}
-					else 			dragging = btn;		// dragging over page thumb
+					else
+						dragging = btn;		// dragging over page thumb
 				}
 			}
 		}
 		
+		pageNumTxt.text = (Pages.indexOf(selected) + 1) + "/" + Pages.length;
 	}//endfunction
 	
 	//=============================================================================
@@ -3985,6 +4090,9 @@ class LHSMenu
 		drawStripedRect(scroll,0,0,4,h-marg*2,0xFFFFFF,0xF6F6F6,5,10);
 		scroll.y = marg;
 		scroll.x = msk.width;
+		
+		pageNumTxt.x = (canvas.width - pageNumTxt.width) / 2;
+		pageNumTxt.y = msk.y+msk.height+20;
 		
 		var bh:Number = Math.min(1,(h-marg*2)/con.height)*(h-marg*2);
 		var bar:Sprite = (Sprite)(scroll.getChildAt(0));
@@ -4042,7 +4150,7 @@ class Space
 																title = txt;
 																tf.x = (lhsIco.width-tf.width)/2;
 															},
-															title);
+															title,-1,14,0xFFFFFF);
 			lhsIco.addChild(tf);
 			
 			var btns:Sprite = new Sprite();
@@ -4294,7 +4402,7 @@ class Page
 		Arrows = new Vector.<Arrow>();
 		ico = new Sprite();
 		ico.addChild(thumb);
-		var tf:TextField = PPTool.utils.createText(title);
+		var tf:TextField = PPTool.utils.createText(title,-1,12,0x999999);
 		tf.y = thumb.height;
 		tf.x = (thumb.width-tf.width)/2;
 		ico.addChild(tf);
@@ -4306,7 +4414,7 @@ class Page
 			{
 				title = tf.text;
 				tf.x = (thumb.width-tf.width)/2;
-			},title);
+			},title,-1,12,0x666666);
 			tf.y = thumb.height;
 			tf.x = (thumb.width-tf.width)/2;
 			ico.addChild(tf);
@@ -4432,16 +4540,12 @@ class RHSMenu
 				var proj:Object = projs[i];
 				proj.pic = proj.image;
 				var s:Sprite = new Sprite();
-				var tf:TextField = new TextField();
-				tf.wordWrap = false;
-				tf.autoSize = "left";
-				tf.text = proj.name;
+				var tf:TextField = PPTool.utils.createText(proj.name,-1,12,0x666666);
 				if (tf.width>bw)
 				{
 					tf.wordWrap = true;
 					tf.width = bw;
 				}
-				tf.selectable = false;
 				tf.y = bh-tf.height;
 				s.addChild(tf);
 				drawStripedRect(s,0,0,bw,bh-tf.height,0xFFFFFF,0xF6F6F6,20,10);
@@ -4516,13 +4620,8 @@ class RHSMenu
 			for (var i:int=0; i<o.data.length; i++)
 			{
 				var s:Sprite = new Sprite();
-				var tf:TextField = new TextField();
-				tf.wordWrap = false;
-				tf.autoSize = "left";
-				tf.text = o.data[i].photoname;
-				tf.selectable = false;
+				var tf:TextField = PPTool.utils.createText(o.data[i].photoname,-1,12,0x666666);
 				tf.y = bh-tf.height;
-				tf.border
 				s.addChild(tf);
 				drawStripedRect(s,0,0,bw,bh-tf.height,0xFFFFFF,0xF6F6F6,20,10);
 				s.buttonMode = true;

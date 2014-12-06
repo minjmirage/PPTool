@@ -61,6 +61,7 @@
 		private var LHS:LHSMenu = null;
 		private var RHS:RHSMenu = null;
 		private var sliderBar:Sprite = null;
+		private var propMenu:Sprite = null;			// floating properties menu
 		
 		private var undoStk:Array = [];
 		private var redoStk:Array = [];
@@ -156,7 +157,12 @@
 			picResizeUI.addChild(new IcoImageCorner());
 			picResizeUI.addChild(new IcoImageCorner());
 			picResizeUI.addChild(new IcoImageCorner());
-			picResizeUI.addChild(new CursorSymbols());
+			var csr:MovieClip = new CursorSymbols();
+			var cb:Rectangle = csr.getBounds(csr);
+			csr.graphics.beginFill(0x000000, 0);
+			csr.graphics.drawRect(cb.left, cb.top, cb.width, cb.height);
+			csr.graphics.endFill();
+			picResizeUI.addChild(csr);
 			(MovieClip)(picResizeUI.getChildAt(picResizeUI.numChildren - 1)).gotoAndStop(1);
 			
 			picResizeUI.buttonMode = true;
@@ -192,6 +198,7 @@
 				RHS.clickCallBack = function (img:Image):void 
 				{
 					trace("RHS.clickCallBack");
+					target = img;
 					img.centerTo(canvas.mouseX,canvas.mouseY);
 					addImage(img);
 					mouseMoveFn = function():void 	// start drag
@@ -552,16 +559,29 @@
 				var s:Sprite = new Sprite();
 				var tf:TextField = utils.createText(txt);
 				tf.mouseEnabled = false;
-				tf.x = 5,
+				tf.x = 5;
 				tf.y = 5;
 				s.addChild(tf);
 				LHSMenu.drawStripedRect(s,0,0,s.width+10,s.height+10,0xCCCCCC,0xC6C6C6,5,0);
 				return s;
 			}//endfunction
 			
+			function createTab(txt:String):Sprite
+			{
+				var s:Sprite = new Tab();
+				var tf:TextField = utils.createText(txt);
+				s.getChildAt(1).width = tf.width;
+				s.getChildAt(2).x = s.getChildAt(1).x + s.getChildAt(1).width;
+				tf.mouseEnabled = false;
+				tf.x = s.getChildAt(0).width;
+				tf.y = (s.height-tf.height)/2;
+				s.addChild(tf);
+				return s;
+			}//endfunction
+			
 			// ----- creates the top labels -------------------------
 			var ItmLst:Sprite = new PageList();	// this is the main sprite
-			var spacs:Array = " 0,  30,  110, 200,270,340, 420,490,540,600,660".split(",");
+			var spacs:Array = " 0,  30,  110, 190,270,340, 420,530,570,650,750".split(",");
 			var labSpr:Sprite = new Sprite();
 			labSpr.graphics.lineStyle(0, 0x333333, 1);
 			labSpr.graphics.drawRect(0, 0, 810, 32);
@@ -622,7 +642,9 @@
 						prevCateId = P[i].cateid;
 					}
 					//printProp(P[i]);
-					var dat:Array = [i,utils.createThumbnail(baseUrl+P[i].image+P[i].thumb200),P[i].productname,P[i].productsn,P[i].pinglei,P[i].size,P[i].material,P[i].color,P[i].price,1,P[i].price];
+					var imgUrl:String = baseUrl + "thumb.php?src=" + P[i].pic + "&w=50";
+					trace("imgUrl="+imgUrl);
+					var dat:Array = [i,utils.createThumbnail(imgUrl),P[i].productname,P[i].productsn,P[i].pinglei,P[i].size,P[i].material,P[i].color,P[i].price,1,P[i].price];
 					totalCost += Number(P[i].price);
 					I.push(dat);
 				}
@@ -646,6 +668,7 @@
 							s.addChild(tf);
 						}
 					}
+					for (j=0; j<s.numChildren; j++)	s.getChildAt(j).y = (s.height-s.getChildAt(j).height)/2;	// center align the elems
 					
 					if (s.numChildren<3)	
 						yOff+= 10;
@@ -705,7 +728,7 @@
 				for (var i:int=0; i<spaceObjs.length; i++)
 				{
 					//printProp(spaceObjs[i]);
-					var btn:Sprite = createBtn(spaceObjs[i].spacename);
+					var btn:Sprite = createTab(spaceObjs[i].spacename);
 					btn.x = s.width+5;
 					s.addChild(btn);
 				}
@@ -726,12 +749,17 @@
 					for (var i:int=0; i<spaceObjs.length; i++)
 					{
 						var btn:Sprite = s.getChildAt(i) as Sprite;
+						var isSel:Boolean = true;
 						if (btn.hitTestPoint(stage.mouseX,stage.mouseY))
 						{
-							if (btn.alpha==1)	btn.alpha=0.5;
-							else				btn.alpha = 1;
+							for (var j:int=0; j<3; j++)
+								if ((MovieClip)(btn.getChildAt(j)).currentFrame==1)	
+								{	(MovieClip)(btn.getChildAt(j)).gotoAndStop(2); isSel = false;}
+								else
+									(MovieClip)(btn.getChildAt(j)).gotoAndStop(1);
+							
 						}
-						if (btn.alpha==1) Ids.push(spaceObjs[i].spaceId);
+						if (isSel) Ids.push(spaceObjs[i].spaceId);
 					}
 					
 					var SelProds:Array = [];
@@ -1349,7 +1377,7 @@
 			// --------------------------------------------------------------------
 			function createMenu(projects:Array,Btns:Vector.<Sprite>):void
 			{
-				var men = new PageOpen();
+				var men:Sprite = new PageOpen();
 				var con:Sprite = new Sprite();
 				con.buttonMode = true;
 				con.x = 15;
@@ -1751,7 +1779,7 @@
 			LHS.resize(sh-main.L.t.height-main.L.b.height);
 			if (RHS!=null)
 			{
-				RHS.canvas.x = main.R.x-25;
+				RHS.canvas.x = main.R.x;
 				trace("RHS.canvas.x="+RHS.canvas.x);
 				RHS.canvas.y = main.R.t.height;
 				RHS.resize(sh-main.R.t.height);
@@ -1951,6 +1979,9 @@
 				return true;
 			}
 			
+			if (propMenu!=null && propMenu.parent!=null && propMenu.hitTestPoint(mx,my))
+				return true;
+			
 			return false;
 		}//endfunction
 		
@@ -2046,6 +2077,7 @@
 				// ----- if clicked follow csr 
 				if (csr.visible)
 				{
+					trace("csr visible!!");
 					if (csr.currentFrame==1)		// dragging cursor
 					{
 						var off:Point = target.getCenter().subtract(new Point(canvas.mouseX,canvas.mouseY));
@@ -2056,8 +2088,9 @@
 					}
 					else if (csr.currentFrame==2)	// scaling cursor
 					{
+						trace("scale Image!!!");
 						var prevScale:Number = 1;
-						mouseMoveFn = function():void 		// ----- rotate image
+						mouseMoveFn = function():void 		// ----- scale image
 						{	
 							var cpt:Point = target.getCenter();
 							var mpt:Point = new Point(canvas.mouseX,canvas.mouseY);
@@ -2158,6 +2191,7 @@
 						if (picResizeUI.getChildAt(i).hitTestPoint(stage.mouseX,stage.mouseY))
 							csr.visible = false;
 					if (main.T.hitTestPoint(stage.mouseX, stage.mouseY) || 
+						(main.P.visible && main.P.hitTestPoint(stage.mouseX, stage.mouseY)) || 
 						main.B.hitTestPoint(stage.mouseX, stage.mouseY) || 
 						main.L.hitTestPoint(stage.mouseX, stage.mouseY) || 
 						main.R.hitTestPoint(stage.mouseX, stage.mouseY))
@@ -2198,6 +2232,8 @@
 			var mX:int = stage.mouseX;
 			var mY:int = stage.mouseY;
 			
+			var curMousePt:Point = new Point(canvas.mouseX, canvas.mouseY);
+			
 			// ----- return if hits UI elements -------------------------------
 			if (disableClick>0)
 				return;
@@ -2207,11 +2243,11 @@
 			var page:Page = LHS.selected;
 			
 			var prevTarg:Image = target;
-			target = null;
+			if (prevMousePt != null && prevMousePt.subtract(curMousePt).length < 1) 
+				target = null;		// deselect target if clicked t same spot after some time
 			
 			// ----- find all images under cursor
-			var curMousePt:Point = new Point(canvas.mouseX, canvas.mouseY);
-			if (mouseMoveFn==null && prevMousePt != null)
+			if (mouseMoveFn==null && prevMousePt != null)	// mouseMoveFn==null when no prev selection
 			{
 				var AllImgs:Vector.<Image> = new Vector.<Image>();
 				var selPoly:Vector.<Point> = 
@@ -2268,8 +2304,14 @@
 				}
 				
 				// ----- show color selector if targ is color square --------------
-				if (target!=null && target.url!=null && target.url.charAt(0) == "#" && prevTarg == target)
+				if (prevTarg != null && 
+					prevTarg.url != null && 
+					prevTarg.url.charAt(0) == "#" &&
+					pointInPoly(curMousePt,prevTarg.Corners))
+				{
+					target = prevTarg;
 					editColorSquare(target);
+				}
 			}
 			
 			// ----- check and add undo
@@ -3003,7 +3045,6 @@
 		//=============================================================================
 		// edits the selected textfield on drawing canvas
 		//=============================================================================
-		private var propMenu:Sprite = null;
 		public function editText(tf:TextField,callBack:Function=null):void
 		{
 			tf.border = true;
@@ -3134,7 +3175,7 @@
 		//=============================================================================
 		public function editColorSquare(target:Image):void
 		{
-			var colorMen:Sprite = createColorMenu(function(c:uint):void 
+			propMenu = createColorMenu(function(c:uint):void 
 			{
 				target.url = "#" + c.toString(16);
 				target.id = target.url;
@@ -3151,19 +3192,19 @@
 				if (minPt.y > target.Corners[i].y) minPt.y = target.Corners[i].y;
 				if (maxPt.y < target.Corners[i].y) maxPt.y = target.Corners[i].y;
 			}
-			if (cpt.x>0)	colorMen.x = canvas.x + minPt.x*canvas.scaleX-colorMen.width;
-			else			colorMen.x = canvas.x + maxPt.x*canvas.scaleX;
-			if (cpt.y>0)	colorMen.y = canvas.y + minPt.y*canvas.scaleY-colorMen.height;
-			else			colorMen.y = canvas.y + maxPt.y*canvas.scaleY;
+			if (cpt.x>0)	propMenu.x = canvas.x + minPt.x*canvas.scaleX-propMenu.width;
+			else			propMenu.x = canvas.x + maxPt.x*canvas.scaleX;
+			if (cpt.y>0)	propMenu.y = canvas.y + minPt.y*canvas.scaleY-propMenu.height;
+			else			propMenu.y = canvas.y + maxPt.y*canvas.scaleY;
 			function closeHandler(ev:Event):void
 			{
-				if (colorMen.hitTestPoint(stage.mouseX, stage.mouseY)) return;
+				if (propMenu.hitTestPoint(stage.mouseX, stage.mouseY)) return;
 				stage.removeEventListener(MouseEvent.MOUSE_DOWN, closeHandler);
-				if (colorMen.parent != null) colorMen.parent.removeChild(colorMen);
+				if (propMenu.parent != null) propMenu.parent.removeChild(propMenu);
 			}//endfunction
 			stage.addEventListener(MouseEvent.MOUSE_DOWN, closeHandler);
 			
-			addChild(colorMen);
+			addChild(propMenu);
 		}//endfunction
 		
 		//=============================================================================
@@ -3543,6 +3584,7 @@ import flash.display.Bitmap;
 import flash.display.BitmapData;
 import flash.display.DisplayObject;
 import flash.display.Sprite;
+import flash.display.MovieClip;
 import flash.events.Event;
 import flash.events.MouseEvent;
 import flash.filters.DropShadowFilter;
@@ -4462,13 +4504,13 @@ class RHSMenu
 		Btns = new Vector.<Sprite>();			// list of all buttons
 		
 		// ----- create side selection tabs
-		setTabs(Vector.<String>(["个\n人\n素\n材","我\n的\n搭\n配","所\n有\n搭\n配"]),
+		setTabs(Vector.<String>(["个人素材","我的搭配","所有搭配"]),
 				Vector.<Function>([	function():void { loadAssetsType(1);	curTab = 0; },
 									function():void { loadCombo("0");	curTab = 1; },
 									function():void { loadCombo("1");	curTab = 2; }]));
 		
 		con = new Sprite();						// container of buttons
-		con.x = sideBtns.width+marg+5;
+		con.x = marg;
 		con.y = marg;
 		canvas.addChild(con);
 		
@@ -4497,24 +4539,26 @@ class RHSMenu
 		
 		sideFns = fns;
 		
-		var offY:int=0;
+		var offX:int=0;
 		for (var i:int=0; i<sideLabels.length; i++)
 		{
-			var btn:Sprite= new Sprite();
-			var tf:TextField = new TextField();
-			tf.autoSize = "left";
-			tf.wordWrap = false;
-			tf.text = sideLabels[i];
-			tf.x = tf.y = 5;
+			var btn:Sprite= new Tab();
+			if (i > 0)
+				for (var j:int = 0; j < btn.numChildren; j++)
+					(MovieClip)(btn.getChildAt(j)).gotoAndStop(2);
+			var tf:TextField = PPTool.utils.createText(sideLabels[i]);
+			tf.x = btn.getChildAt(0).width;
+			tf.y = (btn.height - tf.height) / 2;
 			btn.addChild(tf);
-			drawStripedRect(btn,0,0,tf.width+10,tf.height+10,0xAAAAAA,0xA6A6A6,5,10);
-			btn.y = offY;
-			offY += btn.height;
+			btn.getChildAt(1).width = tf.width;
+			btn.getChildAt(2).x = btn.getChildAt(1).x+btn.getChildAt(1).width
+			btn.x = offX;
+			offX += btn.width;
 			sideBtns.addChild(btn);
 			btn.buttonMode = true;
 			btn.mouseChildren = false;
-			btn.filters = [new GlowFilter(0x000000,1,4,4,1)];
 		}
+		sideBtns.y = -sideBtns.height;
 		canvas.addChildAt(sideBtns,0);
 	}//endfunction
 	
@@ -4637,10 +4681,6 @@ class RHSMenu
 				if (o.data != null && lidx < o.data.length)
 				{
 					var picUrl:String = baseUrl + "thumb.php?src="+o.data[lidx].pic+"&w=100"
-					//var picUrl:String = baseUrl + o.data[lidx].pic;
-					//if (o.data[lidx].thumb200 != null) 			picUrl += o.data[lidx].thumb200;
-					//else if (o.data[lidx].thumb400 != null)		picUrl += o.data[lidx].thumb400;
-					//trace("loading "+picUrl);
 					MenuUtils.loadAsset(picUrl,function(pic:Bitmap):void
 					{
 						if (lidx >= Btns.length)	return;
@@ -4718,9 +4758,7 @@ class RHSMenu
 				}
 				else
 				{
-					var picUrl:String = baseUrl + A[lidx].pic;
-					if (A[lidx].thumb200 != null) 			picUrl += A[lidx].thumb200;
-					else if (A[lidx].thumb400 != null)		picUrl += A[lidx].thumb400;
+					var picUrl:String = baseUrl + "thumb.php?src="+A[lidx].pic+"&w=100"
 					MenuUtils.loadAsset(picUrl,function(pic:Bitmap):void
 					{	// create thumbnail of loaded pic
 						var tf:TextField = (TextField)(Btns[lidx].getChildAt(0));
@@ -4833,14 +4871,16 @@ class RHSMenu
 				if (btn.hitTestPoint(canvas.stage.mouseX,canvas.stage.mouseY))
 				{
 					btn.graphics.clear();
-					drawStripedRect(btn,0,0,btn.getChildAt(0).width+10,btn.getChildAt(0).height+10,0xFFFFFF,0xF6F6F6,5,10);
+					for (var j:int = 0; j < 3; j++)
+						(MovieClip)(btn.getChildAt(j)).gotoAndStop(1);
 					trace("tab "+i);
 					sideFns[i]();
 				}
 				else
 				{
 					btn.graphics.clear();
-					drawStripedRect(btn,0,0,btn.getChildAt(0).width+10,btn.getChildAt(0).height+10,0xAAAAAA,0xA6A6A6,5,10);
+					for (var j:int = 0; j < 3; j++)
+						(MovieClip)(btn.getChildAt(j)).gotoAndStop(2);
 				}
 			}
 		

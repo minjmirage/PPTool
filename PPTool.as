@@ -145,7 +145,15 @@
 			LHS.canvas.y = main.L.t.height;
 			addChild(LHS.canvas);
 			properties = LHS.projProperties;
-			
+			LHS.changeNotify = function():void
+			{	// store undo state on change
+				var s:String = getCurState();
+				if (undoStk[undoStk.length-1]!=s) 
+				{
+					trace("push curState="+s);
+					undoStk.push(s);
+				}
+			}//endfunction
 			
 			// ----- create the picture transform controls ------
 			picResizeUI = new Sprite();
@@ -171,7 +179,7 @@
 			// ----- create magnification slider -------------------
 			sliderBar = createHSlider(function(sc:Number):void 
 			{
-				sc = (0.5*(1-sc)+2*sc);
+				sc = (0.5*(sc)+1.5*(1-sc));
 				canvas.scaleX = canvas.scaleY = sc;
 				paper.scaleX = paper.scaleY = sc;
 			},103);
@@ -179,7 +187,7 @@
 			sliderBar.y = 16;
 			main.B.l.addChild(sliderBar);
 			
-			if (root.loaderInfo.parameters.httpURL!=null) baseUrl = root.loaderInfo.parameters.httpURL+"";	// why the F$%$ this doesnt work
+			if (root.loaderInfo.parameters.httpURL!=null) baseUrl = root.loaderInfo.parameters.httpURL+"";	
 			if (root.loaderInfo.parameters.token!=null) userToken = root.loaderInfo.parameters.token+"";
 			if (baseUrl.charAt(baseUrl.length - 1) != "/")	baseUrl += "/";
 			
@@ -189,12 +197,14 @@
 			//addChild(utils.createText("baseUrl="+baseUrl+"  userToken="+userToken));
 			
 			// ----- function to exec after got userToken
+			var pptool:PPTool = this;
 			function initAfterLogin():void
 			{
 				// ----- the RHS menu -------------------------------
 				RHS = new RHSMenu(userToken,getProductItemsData);
 				addChild(RHS.canvas);	// above canvas and paper
 				prevW = 0;
+				RHS.pptool = pptool;
 				RHS.clickCallBack = function (img:Image):void 
 				{
 					trace("RHS.clickCallBack");
@@ -208,14 +218,12 @@
 					mouseUpFn = function():void
 					{
 						mouseUpFn = null;
-						mouseMoveFn = null;
 						if (paper.hitTestPoint(stage.mouseX,stage.mouseY)==false)
 						{
 							trace("removed image not on paper");
 							if (LHS.selected.Pics.indexOf(img)!=-1)
 								LHS.selected.Pics.splice(LHS.selected.Pics.indexOf(img),1);
 						}
-						updateCanvas();
 					}
 				}
 				RHS.updateCanvas = updateCanvas;
@@ -281,6 +289,7 @@
 				paper.graphics.drawRect(-960/2,-540/2,1280,720);	// 4:3 ratio
 				paper.graphics.endFill();
 			}
+			updateCanvas();
 		}//endfunction
 		
 		//=============================================================================
@@ -289,6 +298,7 @@
 		private function disableInterractions(alp:Number=0.8):Function
 		{
 			trace("disableInterractions("+alp+")");
+			if (disableClick < 0)	disableClick = 0;
 			disableClick++;
 			var s:Sprite = new Sprite();
 			
@@ -452,7 +462,7 @@
 			}
 			
 			// ----- show thumbnail on right when tab is selected
-			var bmp:Bitmap = new Bitmap(new BitmapData(s.msk2.width,s.msk2.height,false,0xFFFFFF));
+			var bmp:Bitmap = new Bitmap(new BitmapData(s.msk2.width-2,s.msk2.height,false,0xFFFFFF));
 			s.msk2.addChild(bmp)
 			function selectPage(i:int):void
 			{
@@ -507,8 +517,7 @@
 				if (bar.hitTestPoint(mx, my))
 					startScroll();
 				else if (s.b1.hitTestPoint(mx,my) ||
-					s.b2.hitTestPoint(mx,my) ||
-					s.bClose.hitTestPoint(mx,my))
+					s.b2.hitTestPoint(mx,my))
 				{
 					if (s.b1.hitTestPoint(mx,my))
 					{
@@ -537,6 +546,10 @@
 			s.addEventListener(MouseEvent.MOUSE_DOWN, clickHandler);
 			
 			s.tf.text = "方案名 : "+properties.name+"\n风格 : "+properties.style+"   类型 : "+properties.type+"\n最后编辑时间 : "+properties.lastModify;
+			setGeneralBtn(s.b1,"确定");
+			setGeneralBtn(s.b2,"关闭");
+			setGeneralBtn(s.bRev,"反选");
+			setGeneralBtn(s.bAll,"全选");
 			
 			addChild(s);
 			return s;
@@ -581,9 +594,8 @@
 			
 			// ----- creates the top labels -------------------------
 			var ItmLst:Sprite = new PageList();	// this is the main sprite
-			var spacs:Array = " 0,  30,  110, 190,270,340, 420,530,570,650,750".split(",");
 			var labSpr:Sprite = new Sprite();
-			labSpr.graphics.lineStyle(0, 0x333333, 1);
+			labSpr.graphics.lineStyle(0, 0x333333, 0);
 			labSpr.graphics.drawRect(0, 0, 810, 32);
 			labSpr.x = 20;
 			labSpr.y = 96;
@@ -631,6 +643,8 @@
 			// ----- changes to given items P ---------------------------------
 			function setDisplayList(P:Array):void
 			{
+				var spacs:Array = [20,60,150,210,280,370,460,530,600,660,750];
+				
 				var prevCateId:String = "";
 				var totalCost:Number = 0;
 				var I:Array = [];
@@ -644,7 +658,7 @@
 					//printProp(P[i]);
 					var imgUrl:String = baseUrl + "thumb.php?src=" + P[i].pic + "&w=50";
 					trace("imgUrl="+imgUrl);
-					var dat:Array = [i,utils.createThumbnail(imgUrl),P[i].productname,P[i].productsn,P[i].pinglei,P[i].size,P[i].material,P[i].color,P[i].price,1,P[i].price];
+					var dat:Array = [i,utils.createThumbnail(imgUrl),P[i].productname,P[i].productsn,P[i].pinglei,P[i].size,P[i].material,P[i].color,P[i].price,P[i].count,P[i].price];
 					totalCost += Number(P[i].price);
 					I.push(dat);
 				}
@@ -658,13 +672,13 @@
 					{
 						if (I[i][j] is Bitmap)
 						{
-							I[i][j].x = Number(spacs[j]);
+							I[i][j].x = Number(spacs[j])  - tf.width / 2;
 							s.addChild(I[i][j]);
 						}
 						else
 						{
 							var tf:TextField = utils.createText(I[i][j],-1,11,0x999999);
-							tf.x = Number(spacs[j]);
+							tf.x = Number(spacs[j]) - tf.width / 2;
 							s.addChild(tf);
 						}
 					}
@@ -734,17 +748,19 @@
 				}
 				
 				// ----------
-				var dlBtn:Sprite = createBtn("下载");
-				dlBtn.x = labSpr.width-dlBtn.width;
+				var cartBtn:GeneralBtn = new GeneralBtn();
+				setGeneralBtn(cartBtn, "加入购物车");
+				cartBtn.x = labSpr.width - cartBtn.width;
+				cartBtn.y -= 5;
+				s.addChild(cartBtn);
+				var dlBtn:GeneralBtn = new GeneralBtn();
+				setGeneralBtn(dlBtn,"下载");
+				dlBtn.x = labSpr.width-cartBtn.width-dlBtn.width-5;
+				dlBtn.y -= 5;
 				s.addChild(dlBtn);
 				
 				function clickSelHandler(ev:Event):void
 				{
-					if (dlBtn.hitTestPoint(stage.mouseX,stage.mouseY))
-					{
-						navigateToURL(new URLRequest(baseUrl+"?n=api&a=scheme&c=scheme&m=excel&id="+saveId+"&token="+userToken));
-					}
-				
 					var Ids:Array = [];
 					for (var i:int=0; i<spaceObjs.length; i++)
 					{
@@ -768,6 +784,36 @@
 							SelProds.push(AllProds[i]);
 					
 					setDisplayList(SelProds);
+					
+					
+					
+					if (dlBtn.hitTestPoint(stage.mouseX,stage.mouseY))
+					{
+						navigateToURL(new URLRequest(baseUrl+"?n=api&a=scheme&c=scheme&m=excel&id="+saveId+"&token="+userToken));
+					}
+					else if (cartBtn.hitTestPoint(stage.mouseX,stage.mouseY))
+					{
+						var jsonStr:String = "";
+						for (i = 0; i < SelProds.length; i++)
+							jsonStr += JSON.stringify( { productid:SelProds[i].id , goodsid:SelProds[i].productsn , total:SelProds[i].count } );
+						trace("cartBtn  jsonStr="+jsonStr);
+						var ldr:URLLoader = new URLLoader();
+						ldr.load(new URLRequest(baseUrl + "?n=api&a=user&c=cart&m=add&json=[" + jsonStr + "]&token=" + userToken));
+						function onComplete(e:Event):void
+						{
+							trace("cartBtn response : "+ldr.data);
+							var o:Object = JSON.parse(ldr.data);
+							var notify:Sprite = utils.createChoices("购物车添加成功", 
+																	Vector.<String>(["确认"]), 
+																	Vector.<Function>([function():void { ItmLst.visible = true; notify.parent.removeChild(notify); } ]),
+																	120);
+							notify.x = (stage.stageWidth - notify.width) / 2;
+							notify.y = (stage.stageHeight - notify.height) / 2;
+							ItmLst.parent.addChild(notify);
+							ItmLst.visible = false;
+						}
+						ldr.addEventListener(Event.COMPLETE, onComplete);  
+					}
 				}//endfunction
 				s.addEventListener(MouseEvent.CLICK,clickSelHandler);
 				
@@ -792,13 +838,13 @@
 			}//endfunction
 			
 			// ----- when server returns, execute -----------------------------
-			function onComplete():void
+			function onLoaded():void
 			{
 				var o:Object = JSON.parse(ldr.data);
-				trace("showItemsList ldr.data=" + prnObject(o));
 				if (o.scheme.qdjson == null)	return;
 				
 				o = JSON.parse(o.scheme.qdjson);
+				trace("showItemsList data=" + prnObject(o));
 				
 				var Products:Array = [];
 				var Spaces:Array = [];
@@ -820,8 +866,15 @@
 							catData[prodId].catId = catId;			// put catId in cat data
 							catData[prodId].spaceId = spaceId;
 							catData[prodId].cateName = cateName;
-							//printProp(catData[prodId]);
-							Products.push(catData[prodId]);
+							// add prod in or increase count
+							var prod:Object = catData[prodId];
+							for (var i:int = Products.length - 1; i > -1; i--)
+								if (Products[i].productsn == prod.productsn)
+								{
+									Products[i].count++;
+									break;
+								}
+							if (i==-1)	Products.push(prod);
 						}
 					}//endfor
 				}//endfor
@@ -831,10 +884,8 @@
 				
 				// show the space slelection
 				createSpaceSelector(Spaces,Products);
-				
-				
 			}//endfunction
-			ldr.addEventListener(Event.COMPLETE, onComplete);  
+			ldr.addEventListener(Event.COMPLETE, onLoaded);  
 						
 			return ItmLst;
 		}//endfunction
@@ -928,14 +979,19 @@
 			function onComplete(e:Event):void
 			{	// ----- when received data from server
 				var o:Object = JSON.parse(ldr.data);
-				var sty:Array = o.categories;
-				while (sty.length > 0 && sty[0].classname != "风格")		// HACK!!!
-					sty.shift();			// to REMOVE all other nonsense....!!
-				if (sty.length>0)	sty.shift();
-				for (var i:int = 0; i < sty.length && sty[i].classname != "空间"; i++)	{}
+				var A:Array = o.categories;
 				var typ:Array = [];
-				if (i<sty.length) typ = sty.slice(i+1);
-				sty.splice(i, sty.length - i);
+				var sty:Array = [];
+				while (A.length > 0 && A[0].classname != "类型")		// HACK!!!
+					A.shift();			// to REMOVE all other nonsense....!!
+				if (A.length > 0)	A.shift();
+				while (A.length > 0 && A[0].classname != "色系")
+					typ.push(A.shift());	// store sytle types
+				while (A.length > 0 && A[0].classname != "风格")		// HACK!!!
+					A.shift();			// to REMOVE all other nonsense....!!
+				if (A.length > 0)	A.shift();
+				while (A.length > 0 && A[0].classname != "空间")
+					sty.push(A.shift());	// store sytle types
 				
 				function makeLst(dat:Array,defaId:String,px:int,py:int,w:int,selFn:Function):void
 				{
@@ -989,7 +1045,8 @@
 			}//endfunction
 			s.b1.addEventListener(MouseEvent.CLICK, closeHandler);
 			s.b2.addEventListener(MouseEvent.CLICK, closeHandler);
-			
+			setGeneralBtn(s.b1,"确定");
+			setGeneralBtn(s.b2,"取消");
 			addChild(s);
 			return s;
 		}//endfunction
@@ -1120,15 +1177,20 @@
 			function onComplete(e:Event):void
 			{	// ----- when received data from server
 				var o:Object = JSON.parse(ldr.data);
-				var sty:Array = o.categories;
-				while (sty.length > 0 && sty[0].classname != "风格")		// HACK!!!
-					sty.shift();			// to REMOVE all other nonsense....!!
-				if (sty.length>0)	sty.shift();
-				for (var i:int = 0; i < sty.length && sty[i].classname != "空间"; i++)	{}
-				var typ:Array = [];
-				if (i<sty.length) typ = sty.slice(i+1);
-				sty.splice(i, sty.length - i);
 				
+				var A:Array = o.categories;
+				var typ:Array = [];
+				var sty:Array = [];
+				while (A.length > 0 && A[0].classname != "类型")		// HACK!!!
+					A.shift();			// to REMOVE all other nonsense....!!
+				if (A.length > 0)	A.shift();
+				while (A.length > 0 && A[0].classname != "色系")
+					typ.push(A.shift());	// store sytle types
+				while (A.length > 0 && A[0].classname != "风格")		// HACK!!!
+					A.shift();			// to REMOVE all other nonsense....!!
+				if (A.length > 0)	A.shift();
+				while (A.length > 0 && A[0].classname != "空间")
+					sty.push(A.shift());	// store sytle types
 				function makeLst(dat:Array,defaId:String,px:int,py:int,w:int,selFn:Function):void
 				{
 					var lst:DisplayObject = null
@@ -1183,7 +1245,8 @@
 			}//endfunction
 			s.b1.addEventListener(MouseEvent.CLICK, closeHandler);
 			s.b2.addEventListener(MouseEvent.CLICK, closeHandler);
-			
+			setGeneralBtn(s.b1,"确定");
+			setGeneralBtn(s.b2,"关闭");
 			addChild(s);
 			return s;
 		}//endfunction
@@ -1201,6 +1264,8 @@
 																clearAll();
 																showProjectProperties();
 																saveId = "";
+																undoStk = [];
+																redoStk = [];
 															},
 															function():void			// list files to load
 															{
@@ -1221,7 +1286,6 @@
 															{
 																showSaveProperties(function(saveIt:Boolean):void
 																{
-																	trace("saveIt="+saveIt);
 																	if (saveIt)
 																	{
 																		saveId = null;		
@@ -1332,25 +1396,25 @@
 			var enableI:Function = disableInterractions();
 			
 			// --------------------------------------------------------------------
-			function makeBtn(data:Object):Sprite
+			function makeBtn(data:Object,isPublic:Boolean=false):Sprite
 			{
-				var ico:Bitmap = new Bitmap(new BitmapData(80,80,false,0xFF0000));
-				
+				// ----- try load first thumbnail from base64
+				var ico:Bitmap = new Bitmap(new BitmapData(80,80,false,0xFFFFFF),"auto",true);
 				try {
-				if (data.b64thumb != null)
-				{
-					var b64dec:Base64Decoder = new Base64Decoder();
-					b64dec.decode(data.b64thumb);
-					var ldr:Loader = new Loader();
-					function imgLoaded(ev:Event):void	
+					if (data.b64thumb != null)
 					{
-						ldr.contentLoaderInfo.removeEventListener(Event.COMPLETE, imgLoaded);
-						ico.bitmapData = (Bitmap)(ldr.content).bitmapData;
-						ico.width = ico.height = 80;
+						var b64dec:Base64Decoder = new Base64Decoder();
+						b64dec.decode(data.b64thumb);
+						var ldr:Loader = new Loader();
+						function imgLoaded(ev:Event):void	
+						{
+							ldr.contentLoaderInfo.removeEventListener(Event.COMPLETE, imgLoaded);
+							ico.bitmapData = (Bitmap)(ldr.content).bitmapData;
+							ico.width = ico.height = 74;
+						}
+						ldr.loadBytes(b64dec.toByteArray());
+						ldr.contentLoaderInfo.addEventListener(Event.COMPLETE, imgLoaded);
 					}
-					ldr.loadBytes(b64dec.toByteArray());
-					ldr.contentLoaderInfo.addEventListener(Event.COMPLETE, imgLoaded);
-				}
 				} 
 				catch (e:Error)
 				{
@@ -1358,9 +1422,9 @@
 				}
 				
 				var btn:MovieClip = new SaveBox();
-				if (data.properties.isPublic == true)	btn.gotoAndStop(2);
-				else 									btn.gotoAndStop(1);
-				ico.x = (btn.width-ico.width)/2;
+				if (isPublic || data.properties.isPublic == true)	btn.gotoAndStop(2);
+				else 												btn.gotoAndStop(1);
+				ico.x = (btn.width-ico.width)/2+2;
 				ico.y = (btn.height-ico.height)/2;
 				btn.addChild(ico);
 				var tf:TextField = 
@@ -1371,6 +1435,34 @@
 				tf.x = 30;
 				btn.addChild(tf);
 				btn.mouseChildren = false;
+				
+				// ----- load product thumbnails
+				var tA:Vector.<String> = new Vector.<String>();
+				for (var i:int=0; i<data.Pages.length; i++)
+					for (var j:int=0; j<data.Pages[i].Pics.length; j++)
+					{
+						var po:Object = data.Pages[i].Pics[j];
+						if (po.data != null && po.pic != null)	// is a combo pic
+							tA.push(po.pic);
+					}
+				
+				var cnt:int = 0;
+				function loadNextThumb():void
+				{
+					if (cnt<3 && cnt<tA.length)
+					{
+						MenuUtils.loadAsset(baseUrl + "thumb.php?src="+tA[cnt]+"&w=74", function(tmb:Bitmap):void 
+						{
+							tmb.y = (btn.height - tmb.height) / 2;
+							tmb.x = ico.x + (cnt+1) * 83;
+							btn.addChild(tmb);
+							cnt++;
+							loadNextThumb();
+						});
+					}
+				}//endfunction
+				if (tA.length > 0)	loadNextThumb();
+				
 				return btn;
 			}//endfunction
 			
@@ -1437,6 +1529,8 @@
 												saveId = projects[idx].id;
 												trace("open "+saveId);
 												restoreFromData(projects[idx].data);	// imports the data string
+												undoStk = [];
+												redoStk = [];
 												closeMen();
 												choi.parent.removeChild(choi);
 											},
@@ -1507,7 +1601,7 @@
 				{
 					var Btns:Vector.<Sprite> = new Vector.<Sprite>();
 					for (var i:int=0; i<projects.length; i++)
-						Btns.push(makeBtn(JSON.parse(projects[i].data)));	// create button with icon and label
+						Btns.push(makeBtn(JSON.parse(projects[i].data),projects[i].isshare>0));	// create button with icon and label
 					createMenu(projects, Btns);
 				}
 				else	// if no save files 
@@ -1705,9 +1799,8 @@
 				target = null;
 				updateCanvas();
 			}
-			
-			canvas.x = sw/2+(main.L.width-main.R.width)/2;
-			canvas.y = sh/2+(main.T.height-main.B.height)/2;
+			canvas.x = (sw + main.L.width-main.R.width)/2;
+			canvas.y = (sh + main.T.height-main.B.height)/2;
 			paper.x = canvas.x;
 			paper.y = canvas.y;
 			
@@ -1761,7 +1854,9 @@
 			trace("chkAndResize sw,sh="+sw+","+sh+"   prevW,prevH="+prevW+","+prevH);
 			prevW = sw;
 			prevH = sh;
-			  
+			
+			main.R.width = 300;	// hack!!
+			
 			main.R.x = sw-main.R.width;
 			main.T.r.x = sw - main.L.width - main.R.width-main.T.r.width+1;
 			main.T.m.width = sw - main.T.l.width - main.T.r.width - main.L.width - main.R.width+1;
@@ -1869,7 +1964,7 @@
 				else if (main.T.r.b4.hitTestPoint(stage.mouseX, stage.mouseY))	// add arrow
 				{
 					trace("add arrow");
-					arrow = new Arrow();
+					arrow = new Arrow(properties.defaArrowColor);
 					LHS.selected.Arrows.push(arrow);					// add image to Page
 					updateCanvas();
 					var s:String = getCurState();
@@ -1880,6 +1975,12 @@
 						updatePageImage();
 					}
 				}
+				return true;
+			}
+			
+			// ----- chk if bottom left buttons pressed
+			if (main.B.l.hitTestPoint(mx, my))
+			{
 				return true;
 			}
 			
@@ -1963,7 +2064,8 @@
 				}
 				else if (ib.b8.visible && ib.b8.hitTestPoint(mx,my))	// LOCK
 				{
-					
+					target.locked = !target.locked;
+					trace("target.locked="+target.locked);
 				}
 				else if (ib.b9.visible && ib.b9.hitTestPoint(mx,my))	// CROP
 				{
@@ -2018,62 +2120,88 @@
 			
 			// ----- if pic controls clicked ----------------------------------
 			var csr:MovieClip = (MovieClip)(picResizeUI.getChildAt(picResizeUI.numChildren - 1));	// the follow cursor
-			if (picResizeUI.hitTestPoint(mX, mY,true))
+			if (!target.locked && picResizeUI.hitTestPoint(mX, mY,true))
 			{
-				for (i=picResizeUI.numChildren-1; i>-1; i--)
+				if (csr.visible && csr.currentFrame==3)	// rotating cursor
 				{
-					var e:Sprite = (Sprite)(picResizeUI.getChildAt(i));
-					if (e.hitTestPoint(mX, mY))
+					trace("frame==3 rotate");
+					var prevAng:Number = 0;
+					mouseMoveFn = function():void 		// ----- rotate image
+					{	
+						var cpt:Point = target.getCenter();
+						var mpt:Point = new Point(canvas.mouseX,canvas.mouseY);
+						var va:Point = prevMousePt.subtract(cpt);
+						var vb:Point = mpt.subtract(cpt);
+						var val:Number = va.length;
+						var vbl:Number = vb.length;
+						if (val==0 || vbl==0) return;
+						va.x/=val; va.y/=val;
+						vb.x/=vbl; vb.y/=vbl;
+						var ang:Number = Math.acos(Math.max(-1,Math.min(1,va.x*vb.x+va.y*vb.y)));
+						if (keyShift)	
+							ang = Math.round(ang*16/(Math.PI*2))/(16/(Math.PI*2)); 
+						var dir:Number = va.x*vb.y - va.y*vb.x;
+						if (dir>0)	ang*=-1;
+						target.rotate(ang-prevAng);
+						prevAng = ang;
+					}//endfunction
+				}
+				else 
+				{
+					for (i=picResizeUI.numChildren-1; i>-1; i--)
 					{
-						if (!e.visible)
+						var e:Sprite = (Sprite)(picResizeUI.getChildAt(i));
+						if (e.hitTestPoint(mX, mY))
 						{
-							// do nothing
-						}
-						else if (e is IcoImageSide)		// ----- scale side 
-						{
-							var cpt:Point = target.getCenter();
-							var ico:Sprite = e;
-							mouseMoveFn = function():void 
+							if (!e.visible)
 							{
-								var v:Point = new Point(ico.x,ico.y).subtract(cpt);
-								var u:Point = v.clone();
-								u.normalize(1);
-								var mv:Point = new Point(canvas.mouseX-cpt.x,canvas.mouseY-cpt.y);
-								var sc:Number = (mv.x*u.x + mv.y*u.y)/v.length;		// side scaling 
-								for (var i:int=target.Corners.length-1; i>-1; i--)
+								// do nothing
+							}
+							else if (e is IcoImageSide)		// ----- scale side 
+							{
+								var cpt:Point = target.getCenter();
+								var ico:Sprite = e;
+								mouseMoveFn = function():void 
 								{
-									var cv:Point = target.Corners[i].subtract(cpt);
-									if (cv.x*u.x+cv.y*u.y>0)
+									var v:Point = new Point(ico.x,ico.y).subtract(cpt);
+									var u:Point = v.clone();
+									u.normalize(1);
+									var mv:Point = new Point(canvas.mouseX-cpt.x,canvas.mouseY-cpt.y);
+									var sc:Number = (mv.x*u.x + mv.y*u.y)/v.length;		// side scaling 
+									for (var i:int=target.Corners.length-1; i>-1; i--)
 									{
-										target.Corners[i].x+=v.x*(sc-1);
-										target.Corners[i].y+=v.y*(sc-1);
+										var cv:Point = target.Corners[i].subtract(cpt);
+										if (cv.x*u.x+cv.y*u.y>0)
+										{
+											target.Corners[i].x+=v.x*(sc-1);
+											target.Corners[i].y+=v.y*(sc-1);
+										}
+										else
+										{
+											target.Corners[i].x-=v.x*(sc-1);
+											target.Corners[i].y-=v.y*(sc-1);
+										}
 									}
-									else
-									{
-										target.Corners[i].x-=v.x*(sc-1);
-										target.Corners[i].y-=v.y*(sc-1);
-									}
-								}
-								target.updateBranch();		// refresh for groupImage
-							}//endfunction
-						}
-						else if (e is IcoImageCorner)	// ----- move corner
-						{
-							var corner:Point = null;
-							for (i=target.Corners.length-1; i>-1; i--)
-								if (corner==null || target.Corners[i].subtract(prevMousePt).length<corner.subtract(prevMousePt).length)
-									corner = target.Corners[i];	// allow dragging of points
-								
-							mouseMoveFn = function():void 
+									target.updateBranch();		// refresh for groupImage
+								}//endfunction
+							}
+							else if (e is IcoImageCorner)	// ----- move corner
 							{
-								corner.x = canvas.mouseX;
-								corner.y = canvas.mouseY;
-								target.updateBranch();		// refresh for groupImage
-							}//endfunction
+								var corner:Point = null;
+								for (i=target.Corners.length-1; i>-1; i--)
+									if (corner==null || target.Corners[i].subtract(prevMousePt).length<corner.subtract(prevMousePt).length)
+										corner = target.Corners[i];	// allow dragging of points
+									
+								mouseMoveFn = function():void 
+								{
+									corner.x = canvas.mouseX;
+									corner.y = canvas.mouseY;
+									target.updateBranch();		// refresh for groupImage
+								}//endfunction
+							}
 						}
-					}
-				}//endfor
-				
+					}//endfor
+				}
 				// ----- if clicked follow csr 
 				if (csr.visible)
 				{
@@ -2104,32 +2232,6 @@
 					}
 				}//endfunction
 			}
-			else 
-			{
-				if (csr.currentFrame==3)	// rotating cursor
-				{
-					var prevAng:Number = 0;
-					mouseMoveFn = function():void 		// ----- rotate image
-					{	
-						var cpt:Point = target.getCenter();
-						var mpt:Point = new Point(canvas.mouseX,canvas.mouseY);
-						var va:Point = prevMousePt.subtract(cpt);
-						var vb:Point = mpt.subtract(cpt);
-						var val:Number = va.length;
-						var vbl:Number = vb.length;
-						if (val==0 || vbl==0) return;
-						va.x/=val; va.y/=val;
-						vb.x/=vbl; vb.y/=vbl;
-						var ang:Number = Math.acos(Math.max(-1,Math.min(1,va.x*vb.x+va.y*vb.y)));
-						if (keyShift)	
-							ang = Math.round(ang*16/(Math.PI*2))/(16/(Math.PI*2)); 
-						var dir:Number = va.x*vb.y - va.y*vb.x;
-						if (dir>0)	ang*=-1;
-						target.rotate(ang-prevAng);
-						prevAng = ang;
-					}//endfunction
-				}
-			}
 			
 			updateCanvas();
 		}//endfunction
@@ -2159,7 +2261,7 @@
 			
 			// ----- position picResizeUI mouse cursor
 			var csr:MovieClip = (MovieClip)(picResizeUI.getChildAt(picResizeUI.numChildren - 1));
-			if (target != null)
+			if (target != null && !target.locked)
 			{
 				var curPt:Point = new Point(canvas.mouseX, canvas.mouseY);
 				if (pointInPoly(curPt, target.Corners))
@@ -2340,7 +2442,6 @@
 		private function updateCanvas():void
 		{
 			trace("updateCanvas");
-			var page:Page = LHS.selected;
 			
 			// ----- updates page background ------------------------
 			var pW:int = paper.width/paper.scaleX;
@@ -2349,6 +2450,9 @@
 			paper.graphics.beginFill(0xFFFFFF, 1);
 			paper.graphics.drawRect(-pW/2, -pH/2, pW, pH);
 			paper.graphics.endFill();
+			
+			if (LHS == null) return;
+			var page:Page = LHS.selected;
 			if (page.bg != null)
 			{
 				var pSc:Number = Math.min(pW / page.bg.width, pH / page.bg.height);
@@ -2393,8 +2497,6 @@
 			{
 				if (arrow != null) arrow.update();	// update pic within arrow
 				canvas.addChild(picResizeUI);
-				var cpt:Point = target.getCenter();
-				setChildPosn(picResizeUI,0,cpt);
 				picResizeUI.graphics.clear();
 				picResizeUI.graphics.lineStyle(0, 0x3399AA);
 				var cn:int = target.Corners.length;
@@ -2402,9 +2504,17 @@
 				for (i=0; i < target.Corners.length; i++)
 				{
 					setChildPosn(picResizeUI,i,new Point((target.Corners[i].x+target.Corners[(i+1)%cn].x)/2,(target.Corners[i].y+target.Corners[(i+1)%cn].y)/2));
-					setChildPosn(picResizeUI,i+4,target.Corners[i]);
+					setChildPosn(picResizeUI, i + 4, target.Corners[i]);
 					picResizeUI.graphics.lineTo(target.Corners[i].x, target.Corners[i].y);
 				}
+				for (i=0; i < picResizeUI.numChildren; i++)
+				{
+					if (target.locked)	picResizeUI.getChildAt(i).visible = false;
+					else				picResizeUI.getChildAt(i).visible = true;
+				}
+				var csr:MovieClip = (MovieClip)(picResizeUI.getChildAt(picResizeUI.numChildren - 1));	// the follow cursor
+				csr.x = picResizeUI.mouseX;
+				csr.y = picResizeUI.mouseY;
 			}
 			else
 			{
@@ -2469,6 +2579,7 @@
 		//=============================================================================
 		private function keyDownHandler(ev:KeyboardEvent):void
 		{
+			if (disableClick) return;
 			if (ev.keyCode==16)		keyShift = true;
 			if (ev.keyCode==17)		keyControl = true;
 		}//endfunction
@@ -2478,6 +2589,7 @@
 		//=============================================================================
 		private function keyUpHandler(ev:KeyboardEvent):void
 		{
+			if (disableClick) return;
 			if (ev.keyCode==16)		keyShift = false;
 			if (ev.keyCode==17)		keyControl = false;
 			
@@ -2510,8 +2622,8 @@
 				if (ev.keyCode==8 || ev.keyCode==46)	// delete
 				{
 					trace("keyup delete");
-					if (page.Pics.indexOf(target)!=-1)
-						LHS.selected.Pics.splice(LHS.Pages.indexOf(target),1);
+					if (page.Pics.indexOf(target) != -1)
+						page.Pics.splice(page.Pics.indexOf(target),1);
 					target = null;
 					updateCanvas();
 				}
@@ -2908,7 +3020,7 @@
 		public function saveToServer(nam:String="incognito",callBack:Function=null):void
 		{
 			// ----- generate save thumb in base64
-			var bmd:BitmapData = new BitmapData(80,80,false,0xFFFFFF);
+			var bmd:BitmapData = new BitmapData(74,74,false,0xFFFFFF);
 			drawCanvasThumb(bmd);
 			var jpgEnc:JPGEncoder = new JPGEncoder(80);
 			var ba:ByteArray = jpgEnc.encode(bmd);
@@ -3027,10 +3139,9 @@
 		//=============================================================================
 		public function addText():TextField
 		{
-			var tf:TextField = utils.createInputText(function():void 
-			{
-			},"TEXT");
+			var tf:TextField = utils.createInputText(function():void{},"TEXT",-1,properties.defaTxtSize,properties.defaTxtColor);
 			canvas.addChild(tf);
+			target = null;
 			
 			mouseMoveFn = function():void
 			{
@@ -3056,54 +3167,78 @@
 			// ------------------------------------------------------
 			function createTextPropertiesMenu():Sprite
 			{
-				var s:Sprite = 
-				utils.createChoices("字体",
-									Vector.<String>(["字体大小 "+tf.defaultTextFormat.size, 
-													"字体颜色 " + tf.defaultTextFormat.color.toString(16),
-													"删除", 
-													"确认"]),
-									Vector.<Function>([	function():void 			// change font size fn
-														{
-															var tff:TextFormat = tf.defaultTextFormat;
-															var btn0:Sprite = s.getChildAt(1) as Sprite;
-															var inTf:TextField = utils.createInputText(function(txt:String):void 
-															{
-																(TextField)(btn0.getChildAt(0)).text = "字体大小 " + tff.size;
-																if (isNaN(parseInt(txt))) return;
-																tff.size = parseInt(txt);
-																tf.defaultTextFormat = tff;
-																tf.setTextFormat(tff);
-																(TextField)(btn0.getChildAt(0)).text = "字体大小 " + tff.size;
-																if (inTf.parent!=null) inTf.parent.removeChild(inTf);
-															}, tf.defaultTextFormat.size + "", btn0.width);
-															(TextField)(btn0.getChildAt(0)).text = "";
-															inTf.x = btn0.x; 
-															inTf.y = btn0.y;
-															s.addChild(inTf);
-														},
-														function():void 			// change text color
-														{
-															showColorMenu(function(color:uint):void 
-																		{
-																			var tff:TextFormat = tf.defaultTextFormat;
-																			tff.color = color;
-																			tf.defaultTextFormat = tff;
-																			tf.setTextFormat(tff);
-																			showLabelProperties();
-																		});
-														},
-														function():void 			// remove text 
-														{
-															LHS.selected.Txts.splice(LHS.selected.Txts.indexOf(tf),1);
-															if (tf.parent != null) tf.parent.removeChild(tf);
-															endEdit();
-														},
-														function():void 			// done editing text 
-														{
-															endEdit();
-															
-														}	]));
-				s.filters = [new DropShadowFilter(3,45,0x000000)];
+				var s:Sprite = new TextProp();
+				
+				// ----- font size textfield
+				var inTf:TextField = utils.createInputText(function(txt:String):void 
+				{
+					if (isNaN(parseInt(txt))) return;
+					var tff:TextFormat = tf.defaultTextFormat;
+					tff.size = parseInt(txt);
+					properties.defaTxtSize = tff.size;
+					tf.defaultTextFormat = tff;
+					tf.setTextFormat(tff);
+					showLabelProperties();
+				}, properties.defaTxtSize + "", 40);
+				inTf.x = 73; 
+				inTf.y = 45;
+				s.addChild(inTf);
+				
+				// ----- font color rect
+				var colorRect:Sprite = new Sprite();
+				colorRect.graphics.beginFill(uint(tf.defaultTextFormat.color+""), 1);
+				colorRect.graphics.drawRect(0, 0, 40, 20);
+				colorRect.graphics.endFill();
+				colorRect.x = 73;
+				colorRect.y = 70;
+				s.addChild(colorRect);
+				colorRect.buttonMode = true;
+				
+				// ----- ok button
+				var okBtn:GeneralBtn = new GeneralBtn();
+				setGeneralBtn(okBtn, "确认", 58);
+				okBtn.x = 18;
+				okBtn.y = 100;
+				s.addChild(okBtn);				
+				
+				// ----- delete button
+				var delBtn:GeneralBtn = new GeneralBtn();
+				setGeneralBtn(delBtn, "删除", 38);
+				delBtn.x = 79;
+				delBtn.y = 100;
+				s.addChild(delBtn);
+				
+				function clickHandler(ev:Event):void
+				{
+					if (colorRect.hitTestPoint(stage.mouseX,stage.mouseY))
+					showColorMenu(function(color:uint):void 
+						{
+							var tff:TextFormat = tf.defaultTextFormat;
+							tff.color = color;
+							properties.defaTxtColor = color;
+							tf.defaultTextFormat = tff;
+							tf.setTextFormat(tff);
+							showLabelProperties();
+						});
+					else if (delBtn.hitTestPoint(stage.mouseX, stage.mouseY))
+					{
+						LHS.selected.Txts.splice(LHS.selected.Txts.indexOf(tf),1);
+						if (tf.parent != null) tf.parent.removeChild(tf);
+						endEdit();
+					}
+					else if (okBtn.hitTestPoint(stage.mouseX, stage.mouseY))
+					{
+						endEdit();
+					}
+				}
+				function removeHandler(ev:Event):void
+				{
+					s.removeEventListener(MouseEvent.CLICK, clickHandler);
+					s.removeEventListener(Event.REMOVED_FROM_STAGE, removeHandler);
+				}
+				s.addEventListener(MouseEvent.CLICK, clickHandler);
+				s.addEventListener(Event.REMOVED_FROM_STAGE, removeHandler);
+				
 				return s;
 			}
 			
@@ -3127,16 +3262,9 @@
 					propMenu.parent.removeChild(propMenu);
 				
 				propMenu = men;	
+				propMenu.x = canvas.x+(tf.x+tf.width+10)*canvas.scaleX;
+				propMenu.y = canvas.y+(tf.y)*canvas.scaleY;
 				addChild(propMenu);
-				if (tf.x+tf.width/2<0)
-					propMenu.x = canvas.x+tf.x+tf.width+10;
-				else
-					propMenu.x = canvas.x+tf.x-propMenu.width-10;
-					
-				if (tf.y+tf.height/2<0)
-					propMenu.y = canvas.y+tf.y+tf.height+10;
-				else
-					propMenu.y = canvas.y+tf.y-propMenu.height-10;
 				
 				trace("propMenu posn=(" + propMenu.x + "," + propMenu.y + ")");
 			}//endfunction
@@ -3175,6 +3303,8 @@
 		//=============================================================================
 		public function editColorSquare(target:Image):void
 		{
+			if (propMenu!=null && propMenu.parent!=null)	
+				propMenu.parent.removeChild(propMenu);
 			propMenu = createColorMenu(function(c:uint):void 
 			{
 				target.url = "#" + c.toString(16);
@@ -3224,6 +3354,7 @@
 															showColorMenu(function(color:uint):void 
 																		{
 																			arr.color = color;
+																			properties.defaArrowColor = color;
 																			arr.update();
 																			showArrowProperties();
 																		});
@@ -3302,6 +3433,7 @@
 		{
 			var s:ColorSelect = new ColorSelect();
 			var c:uint = 0x000000;
+			var wh:Point = new Point(s.colorBox.width, s.colorBox.height);
 			
 			function clickHandler(ev:Event):void
 			{
@@ -3312,19 +3444,26 @@
 					if (s.parent!=null) s.parent.removeChild(s);
 					return;
 				}
+				if (s.colorArea.hitTestPoint(stage.mouseX, stage.mouseY, true) == false)
+					return;
 				var bmd:BitmapData = new BitmapData(1,1,false,0x00000000);
 				bmd.draw(s,new Matrix(1,0,0,1,-s.mouseX,-s.mouseY));
 				c = bmd.getPixel(0,0);
-				var wh:Point = new Point(s.colorBox.width,s.colorBox.height);
+				
 				while (s.colorBox.numChildren>0)	s.colorBox.removeChildAt(0);
 				s.colorBox.graphics.clear();
 				s.colorBox.graphics.beginFill(c);
-				s.colorBox.graphics.drawRoundRect(0,0,wh.x,wh.y,3,3);
+				s.colorBox.graphics.drawRoundRect(2,2,wh.x-4,wh.y-4,3,3);
 				s.colorBox.graphics.endFill();
-				var tf:TextField = utils.createText(c.toString(16),-1,15,0x1000000-c);
+				
+				var tf:TextField = null;
+				if ((c & 0xFF) + ((c >> 8) & 0xFF) + ((c >> 16) & 0xFF) < 128 * 3)
+					tf = utils.createText(c.toString(16), -1, 15, 0xFFFFFF);
+				else
+					tf = utils.createText(c.toString(16), -1, 15, 0x000000);
 				tf.selectable = true;
-				tf.x = (s.colorBox.width-tf.width)/2;
-				tf.y = (s.colorBox.height-tf.height)/2;
+				tf.x = (wh.x-tf.width)/2;
+				tf.y = (wh.y-tf.height)/2;
 				s.colorBox.addChild(tf);
 				trace("c="+c);
 			}//endfunction
@@ -3337,7 +3476,11 @@
 			
 			s.addEventListener(Event.REMOVED_FROM_STAGE,cleanUpHandler);
 			s.addEventListener(MouseEvent.CLICK, clickHandler);
-			s.filters = [new DropShadowFilter(1,45,0x000000,1,4,4,1)];
+			s.filters = [new DropShadowFilter(1, 45, 0x000000, 1, 4, 4, 1)];
+			
+			s.colorArea.buttonMode = true;
+			setGeneralBtn(s.btn, "确认", 58);
+			
 			return s;
 		}//endfunction
 		
@@ -3370,7 +3513,7 @@
 			}
 			var ba:ByteArray = printPDF.save( Method.LOCAL);
 			var fr:FileReference = new FileReference();
-			fr.save(ba,"export.pdf");
+			fr.save(ba,properties.name+".pdf");
 		}//endfunction
 		
 		//=============================================================================
@@ -3379,6 +3522,7 @@
 		private function drawCanvasThumb(bmd:BitmapData):void
 		{
 			// ----- draw on thumbnail of page ----------------------
+			trace("drawCanvasThumb()  LHS.selected="+LHS.selected);
 			picResizeUI.visible = false;
 			//bmd.fillRect(new Rectangle(0,0,bmd.width,bmd.height),0xFFCC00CC);
 			var mat:Matrix = new Matrix(bmd.width/paper.width*paper.scaleX,0,0,bmd.height/paper.height*paper.scaleY,bmd.width/2,bmd.height/2);
@@ -3575,6 +3719,56 @@
 			return new Point(ax + avx/al*ak,ay + avy/al*ak);
 		}//endfunction
 		
+		//===============================================================================================
+		// convenience function to set button roll over behavior
+		//===============================================================================================
+		public static function setGeneralBtn(btn:GeneralBtn,txt:String,w:int=-1):void
+		{
+			btn.buttonMode = true;
+			btn.mouseChildren = false;
+			
+			if (w != -1)
+			{
+				btn.m.width = w - btn.l.width - btn.r.width;
+				btn.r.x = btn.l.width + btn.m.width;
+			}
+			btn.tf.text = txt;
+			btn.tf.width = btn.l.width + btn.m.width + btn.r.width;
+			
+			function rollOverHandler(ev:Event):void
+			{
+				btn.l.gotoAndStop(2);
+				btn.m.gotoAndStop(2);
+				btn.r.gotoAndStop(2);
+				var tff:TextFormat = btn.tf.defaultTextFormat;
+				tff.color = 0xFFFFFF;
+				btn.tf.setTextFormat(tff);
+			}//endfunction
+			
+			function rollOutHandler(ev:Event):void
+			{
+				btn.l.gotoAndStop(1);
+				btn.m.gotoAndStop(1);
+				btn.r.gotoAndStop(1);
+				var tff:TextFormat = btn.tf.defaultTextFormat;
+				tff.color = 0xCCCCCC;
+				btn.tf.setTextFormat(tff);
+			}//endfunction
+			
+			rollOutHandler(null);
+			
+			function removeHandler(ev:Event):void
+			{
+				btn.removeEventListener(MouseEvent.MOUSE_OVER, rollOverHandler);
+				btn.removeEventListener(MouseEvent.MOUSE_OUT, rollOutHandler);
+				btn.removeEventListener(Event.REMOVED_FROM_STAGE, removeHandler);
+			}//endfunction
+			btn.addEventListener(MouseEvent.MOUSE_OVER, rollOverHandler);
+			btn.addEventListener(MouseEvent.MOUSE_OUT, rollOutHandler);
+			btn.addEventListener(Event.REMOVED_FROM_STAGE, removeHandler);
+			
+		}//endfunction
+		
 	}//endclass
 	
 }//endpackage
@@ -3593,6 +3787,7 @@ import flash.geom.ColorTransform;
 import flash.geom.Matrix;
 import flash.geom.Point;
 import flash.geom.Rectangle;
+import flash.net.navigateToURL;
 import flash.net.URLLoader;
 import flash.net.URLRequest;
 import flash.net.URLVariables;
@@ -3610,7 +3805,7 @@ class Arrow
 	//=============================================================================
 	// 
 	//=============================================================================
-	public function Arrow():void
+	public function Arrow(c:uint=0x334455):void
 	{
 		canvas = new Sprite();
 		canvas.filters = [new DropShadowFilter(1,45,0x000000)];
@@ -3624,6 +3819,7 @@ class Arrow
 		tail = new Sprite();
 		canvas.addChild(tail);
 		
+		color = c;
 		// ----- 
 		pic = new Image();
 		pic.url = pic.id = "#" + color.toString(16);
@@ -3661,7 +3857,7 @@ class Arrow
 		tail.graphics.endFill();
 		
 		canvas.graphics.clear();
-		canvas.graphics.lineStyle(3,color,1);
+		canvas.graphics.lineStyle(1,color,1);
 		
 		var ctr:Point = pic.getCenter();
 		
@@ -3703,7 +3899,15 @@ class Arrow
 			}
 		}
 		canvas.graphics.lineStyle();
-		if (pic!=null) pic.drawOn(canvas);	// draws the arrow pic
+		if (pic != null)
+		{
+			pic.drawOn(canvas);	// draws the arrow pic
+			canvas.graphics.moveTo(pic.Corners[0].x, pic.Corners[0].y);
+			canvas.graphics.lineTo(pic.Corners[1].x, pic.Corners[1].y);
+			canvas.graphics.lineTo(pic.Corners[2].x, pic.Corners[2].y);
+			canvas.graphics.lineTo(pic.Corners[3].x, pic.Corners[3].y);
+			canvas.graphics.lineTo(pic.Corners[0].x, pic.Corners[0].y);
+		}
 	}//endfunction
 		
 	//=============================================================================
@@ -3748,6 +3952,11 @@ class ProjProperties
 	public var qu:String = "---";
 	public var form:String = "4:3";
 	public var isPublic:Boolean = false;
+	
+	public var defaArrowColor:uint = 0x666666;
+	public var defaTxtColor:uint = 0x666666;
+	public var defaTxtSize:uint = 14;
+	public var defaColor:uint = 0x666666;
 	
 	public var lastModify:String = "";
 	
@@ -3794,6 +4003,8 @@ class LHSMenu
 	public var selected:Page = null;
 	public var projProperties:ProjProperties = null;
 	public var b64thumb:String = null;
+	
+	public var changeNotify:Function = null;
 	
 	private var marg:int = 10;
 	private var bw:int = 120;
@@ -3843,10 +4054,11 @@ class LHSMenu
 		createSpaceBtn.buttonMode = true;
 		
 		canvas.addEventListener(Event.ENTER_FRAME,enterFrameHandler);
-		canvas.addEventListener(MouseEvent.MOUSE_DOWN,mouseDownHandler);
+		canvas.addEventListener(MouseEvent.MOUSE_DOWN, mouseDownHandler);
 		function addedHandler(ev:Event):void
 		{
 			canvas.removeEventListener(Event.ADDED_TO_STAGE, addedHandler);
+			canvas.parent.addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);
 			canvas.stage.addEventListener(MouseEvent.MOUSE_UP,mouseUpHandler);
 		}
 		canvas.addEventListener(Event.ADDED_TO_STAGE, addedHandler);
@@ -4066,6 +4278,7 @@ class LHSMenu
 			space = new Space();
 			Spaces.push(space);
 			pageNumTxt.text = (Pages.indexOf(selected) + 1) + "/" + Pages.length;
+			if (changeNotify!=null) changeNotify();
 			return;
 		}
 		// ----- allow scrollbar dragging -------------------------
@@ -4086,6 +4299,7 @@ class LHSMenu
 				{
 					Spaces.splice(i,1);	// delete page if cross is clicked
 					selected = Spaces[Math.max(0,i-1)].Pages[0];
+					if (changeNotify!=null) changeNotify();
 				}
 				else if (spc.pointHitsTextfield())
 				{}
@@ -4094,10 +4308,12 @@ class LHSMenu
 					spc.addPage();
 					enterFrameHandler(null);
 					resize(msk.height+marg*2);	// to refresh scrollbar
+					if (changeNotify!=null) changeNotify();
 				}
 				else if (spc.chkHitThumbCloseBtns())
 				{
-					// destroy thumbnails
+					// destroyed page
+					if (changeNotify!=null) changeNotify();
 				}
 				else
 				{
@@ -4117,6 +4333,21 @@ class LHSMenu
 		pageNumTxt.text = (Pages.indexOf(selected) + 1) + "/" + Pages.length;
 	}//endfunction
 	
+	//=============================================================================
+	// scrolls by mouseWheel
+	//=============================================================================
+	private function mouseWheelHandler(ev:MouseEvent):void
+	{
+		if (canvas.stage!=null && canvas.hitTestPoint(canvas.stage.mouseX, canvas.stage.mouseY))
+		{
+			var bar:Sprite = (Sprite)(scroll.getChildAt(0));
+			bar.y += ev.delta*5;
+			if (bar.y < 0) bar.y = 0;
+			if (bar.y > msk.height - bar.height) bar.y = msk.height - bar.height;
+			con.y = marg - bar.y / msk.height * con.height;
+		}
+	}//endfunction
+
 	//=============================================================================
 	// resizes this menu
 	//=============================================================================
@@ -4467,7 +4698,7 @@ class Page
 class RHSMenu
 {
 	public var canvas:Sprite = null;
-	private var dat:Object = null;
+	private var dat:Array = null;
 	private var Btns:Vector.<Sprite> = null;
 	private var con:Sprite = null;	
 	private var pageBtns:Sprite = null;
@@ -4475,21 +4706,29 @@ class RHSMenu
 	private var sideFns:Vector.<Function> = null;
 	
 	private var marg:int = 6;
-	private var bw:int = 66;
-	private var bh:int = 76;
+	private var bw:int = 90;
+	private var bh:int = 106;
 	private var height:int = 600; 
 	private var category:int=0;			// current category being displayed
 	private var page:int=0;				// current page in category
 	
-	private var curTab:int = 0;
-	
-	private var getProductItemsData:Function = null;
+	private var curTab:int = 0;			// assets category tab
+	private var subCat:String = "";		// assets subcategory within tab
+	private var dirId:String = "";		// 
 	
 	private var baseUrl:String = "";
 	private var userToken:String;
 	
-	public var clickCallBack:Function = null;	// function to return 
+	private var getProductItemsData:Function = null;	// passed in function
+	public var clickCallBack:Function = null;			// function to return 
 	public var updateCanvas:Function = null;
+	public var pptool:PPTool = null;
+	
+	private var searchBar:MovieClip = null;				// the micro ui beneath the tabs
+	private var btnFolder:MovieClip = null;				// 
+	private var dropDownList:Sprite = null;				// cate sel list
+	
+	private var LoadFns:Vector.<Function> = null;
 	
 	//=============================================================================
 	// Constr
@@ -4503,11 +4742,90 @@ class RHSMenu
 		canvas = new Sprite();					// main container
 		Btns = new Vector.<Sprite>();			// list of all buttons
 		
+		
+		LoadFns = Vector.<Function>([function():void 	// 我的作品
+									{
+										loadProjs(baseUrl+"?n=api&a=scheme&c=match&m=index&isshare=0&token="+userToken);
+										curTab = 0; 
+										subCat = "搭配图";
+										inTf.text = "输入关键字";
+										btnFolder.visible = true; 
+										if (dropDownList != null && dropDownList.parent != null)
+											dropDownList.parent.removeChild(dropDownList);
+									},
+									function():void 	// 个人素材
+									{
+										loadFolders(function (A:Array):void 
+										{ 
+											trace("loaded folders:" + A); 
+											loadAssets(baseUrl + "?n=api&a=user&c=photo&type=" + 1 + "&token=" + userToken, A);
+										});
+										curTab = 1; 
+										subCat = "";
+										inTf.text = "输入关键字";
+										btnFolder.visible = true; 
+										if (dropDownList != null && dropDownList.parent != null)
+											dropDownList.parent.removeChild(dropDownList);
+									},
+									function():void 	// 收藏夹
+									{
+										loadAssets(baseUrl + "?n=api&a=user&c=favorite&t=product&token=" + userToken);
+										curTab = 2; 
+										subCat = "产品收藏";
+										inTf.text = "输入关键字";
+										btnFolder.visible = true;
+										if (dropDownList != null && dropDownList.parent != null)
+											dropDownList.parent.removeChild(dropDownList);
+										dropDownList = PPTool.utils.createDropDownList(Vector.<String>(["产品收藏", "搭配收藏", "灵感图收藏"]),"产品收藏",
+										function(va:String):void 
+										{
+											subCat = va;
+											if (va == "产品收藏")
+												loadAssets(baseUrl + "?n=api&a=user&c=favorite&t=product&token=" + userToken);
+											if (va == "搭配收藏")
+												loadAssets(baseUrl + "?n=api&a=user&c=favorite&t=match&token=" + userToken);
+											if (va == "灵感图收藏")
+												loadAssets(baseUrl + "?n=api&a=user&c=favorite&t=photo&token=" + userToken);
+										},100, 5);
+										dropDownList.x = searchBar.x + searchBar.width + 5;
+										dropDownList.y = searchBar.y+(searchBar.height-dropDownList.height)/2;
+										canvas.addChild(dropDownList);
+									},
+									function():void 	// 上传的素材
+									{ 
+										loadAssets(baseUrl+"?n=api&a=scheme&c=scheme_pic&schemeid="+pptool.properties.saveId+"&token="+userToken);	
+										curTab = 3;
+										subCat = "";
+										inTf.text = "输入关键字";
+										btnFolder.visible = false; 
+										if (dropDownList != null && dropDownList.parent != null)
+											dropDownList.parent.removeChild(dropDownList);
+									},
+									function():void 	// 公共素材
+									{ 
+										loadAssets(baseUrl + "?n=api&a=scheme&c=scheme_resource&m=index&type=1&token=" + userToken);
+										curTab = 4; 
+										subCat = "背景图";88
+										inTf.text = "输入关键字";
+										btnFolder.visible = false; 
+										if (dropDownList != null && dropDownList.parent != null)
+											dropDownList.parent.removeChild(dropDownList);
+										dropDownList = PPTool.utils.createDropDownList(Vector.<String>(["背景图", "图形图"]),"背景图",
+										function(va:String):void 
+										{
+											subCat = va;
+											if (va == "背景图")
+												loadAssets(baseUrl + "?n=api&a=scheme&c=scheme_resource&m=index&type=1&token=" + userToken);
+											if (va == "图形图")
+												loadAssets(baseUrl + "?n=api&a=scheme&c=scheme_resource&m=index&type=3&token=" + userToken);
+										},100, 5);
+										dropDownList.x = searchBar.x + searchBar.width + 5;
+										dropDownList.y = searchBar.y+(searchBar.height-dropDownList.height)/2;
+										canvas.addChild(dropDownList);
+									}]);
+		
 		// ----- create side selection tabs
-		setTabs(Vector.<String>(["个人素材","我的搭配","所有搭配"]),
-				Vector.<Function>([	function():void { loadAssetsType(1);	curTab = 0; },
-									function():void { loadCombo("0");	curTab = 1; },
-									function():void { loadCombo("1");	curTab = 2; }]));
+		setTabs(Vector.<String>(["我的搭配","个人素材","收场夹","上传的素材","公共素材"]),LoadFns);
 		
 		con = new Sprite();						// container of buttons
 		con.x = marg;
@@ -4516,17 +4834,44 @@ class RHSMenu
 		
 		pageBtns = new Sprite();
 		pageBtns.buttonMode = true;
+		pageBtns.mouseChildren = false;
 		canvas.addChild(pageBtns);
 		
 		canvas.addEventListener(Event.ENTER_FRAME,enterFrameHandler);
-		canvas.addEventListener(MouseEvent.MOUSE_DOWN,mouseDownHandler);
+		con.addEventListener(MouseEvent.MOUSE_DOWN,mouseDownHandler);
 		canvas.addEventListener(MouseEvent.MOUSE_UP,mouseUpHandler);
 		
-		loadAssetsType(1);		// default load assets 1
+		btnFolder = new BtnFolder();
+		btnFolder.buttonMode = true;
+		btnFolder.y = -btnFolder.height - 8;
+		btnFolder.x = 300-btnFolder.width-5;
+		canvas.addChild(btnFolder);
+		
+		searchBar = new SearchBox();
+		searchBar.x = 10;
+		searchBar.y = -searchBar.height - 5;
+		var inTf:TextField = PPTool.utils.createInputText(function(txt:String):void 
+		{	// search!!!
+			//inTf.text = "关键词功能缺失!";
+			if (curTab == 0)	loadProjs(baseUrl + "?n=api&a=scheme&c=match&m=index&limit=1000&page=1&keyword="+txt+"&token=" + userToken);
+			if (curTab == 1)	loadAssets(baseUrl + "?n=api&a=user&c=photo&dirid="+dirId+"&keyword=" + txt + "&token=" + userToken);
+			if (curTab == 2)	inTf.text = "检索功能不做";
+			if (curTab == 4)	
+			{
+				if (subCat == "背景图")	loadAssets(baseUrl + "?n=api&a=scheme&c=scheme_resource&m=index&type=1&limit=20&page=1&keyword=" + txt + "&token=" + userToken);
+				if (subCat == "图形图")	loadAssets(baseUrl + "?n=api&a=scheme&c=scheme_resource&m=index&type=3&limit=20&page=1&keyword=" + txt + "&token=" + userToken);
+			}			
+		},"输入关键字", 80, 11);
+		inTf.x = 5;
+		inTf.y = (searchBar.height - inTf.height) / 2;
+		searchBar.addChild(inTf);
+		canvas.addChild(searchBar);
+		
+		LoadFns[0]();		// default load assets 0
 	}//endconstr
 	
 	//=============================================================================
-	// 
+	// the tabs at the top of the menu
 	//=============================================================================
 	private function setTabs(sideLabels:Vector.<String>,fns:Vector.<Function>):void
 	{
@@ -4546,11 +4891,11 @@ class RHSMenu
 			if (i > 0)
 				for (var j:int = 0; j < btn.numChildren; j++)
 					(MovieClip)(btn.getChildAt(j)).gotoAndStop(2);
-			var tf:TextField = PPTool.utils.createText(sideLabels[i]);
-			tf.x = btn.getChildAt(0).width;
+			var tf:TextField = PPTool.utils.createText(sideLabels[i],-1,11);
+			tf.x = btn.getChildAt(0).width-3;
 			tf.y = (btn.height - tf.height) / 2;
 			btn.addChild(tf);
-			btn.getChildAt(1).width = tf.width;
+			btn.getChildAt(1).width = tf.width-6;
 			btn.getChildAt(2).x = btn.getChildAt(1).x+btn.getChildAt(1).width
 			btn.x = offX;
 			offX += btn.width;
@@ -4558,29 +4903,31 @@ class RHSMenu
 			btn.buttonMode = true;
 			btn.mouseChildren = false;
 		}
-		sideBtns.y = -sideBtns.height;
+		sideBtns.y = -sideBtns.height-35;
 		canvas.addChildAt(sideBtns,0);
 	}//endfunction
 	
 	//=============================================================================
 	// loads specified asset type, external loaded pics
 	//=============================================================================
-	private function loadCombo(share:String="0"):void
+	private function loadProjs(url:String):void
 	{
-		trace("loadCombo");
+		trace("loadProjs(url="+url+")");
 		sideBtns.visible = false;
 		var ldr:URLLoader = new URLLoader();
-		var req:URLRequest = new URLRequest(baseUrl+"?n=api&a=scheme&c=match&m=index&isshare="+share+"&token="+userToken);
+		var req:URLRequest = new URLRequest(url);
 		ldr.load(req);
 		ldr.addEventListener(Event.COMPLETE, onComplete);  
 		function onComplete(e:Event):void
 		{	// ----- when received data from server
 			var o:Object = JSON.parse(ldr.data);
+			//trace("projs="+PPTool.prnObject(o));
 			var projs:Array = o.projects;
 			Btns = new Vector.<Sprite>();
 			dat = projs;
 			for (var i:int=0; i<projs.length; i++)
 			{
+				//trace("proj[" + i + "]=" + projs[i]);
 				var proj:Object = projs[i];
 				proj.pic = proj.image;
 				var s:Sprite = new Sprite();
@@ -4606,18 +4953,14 @@ class RHSMenu
 				if (lidx < dat.length)
 				{
 					var picUrl:String = baseUrl + "thumb.php?src="+dat[lidx].pic+"&w=100"
-					//var picUrl:String = baseUrl + dat[lidx].pic;
-					//if (dat[lidx].thumb200 != null) 			picUrl += dat[lidx].thumb200;
-					//else if (dat[lidx].thumb400 != null)		picUrl += dat[lidx].thumb400;
-					//trace("loading "+picUrl);
 					MenuUtils.loadAsset(picUrl,function(pic:Bitmap):void
 					{
-						var tf:TextField = (TextField)(Btns[lidx].getChildAt(0));
-						if (picUrl == null) pic = new Bitmap(new BitmapData(bw, bh - tf.height, false, 0xAA0000));
-						pic.width = bw;
-						pic.height = bh-tf.height;
 						if (Btns.length>lidx)
 						{
+							var tf:TextField = (TextField)(Btns[lidx].getChildAt(0));
+							if (pic == null) pic = new Bitmap(new BitmapData(bw, bh - tf.height, false, 0xAA0000));
+							pic.width = bw;
+							pic.height = bh-tf.height;
 							Btns[lidx].addChild(pic);
 							dat[lidx].bmd = pic.bitmapData;
 							tf.x = (pic.width-tf.width)/2;
@@ -4636,15 +4979,12 @@ class RHSMenu
 	}//endfunction
 	
 	//=============================================================================
-	// loads specified asset type, external loaded pics
+	// loads the stupid folders
 	//=============================================================================
-	private function loadAssetsType(tp:int=1):void
+	private function loadFolders(callBack:Function):void
 	{
-		trace("loadAssetsType");
-		
 		//sideBtns.visible = false;
-		
-		var req:URLRequest = new URLRequest(baseUrl+"?n=api&a=user&c=photo&type="+tp+"&token="+userToken);
+		var req:URLRequest = new URLRequest(baseUrl+"?n=api&a=user&c=photo_dir");
 		var ldr:URLLoader = new URLLoader(req);
 		req.method = "post";  
 		var vars:URLVariables = new URLVariables();  
@@ -4654,17 +4994,50 @@ class RHSMenu
 		ldr.addEventListener(Event.COMPLETE, onComplete);  
 		function onComplete(e:Event):void
 		{	// ----- when received data from server
-			//trace(ldr.data);
-			var o:Object = JSON.parse(ldr.data);
-			dat = o.data;
+			trace("loadFolders ldr.data="+ldr.data);
+			var folders:Array = JSON.parse(ldr.data).data;
+			callBack(folders);
+		}
+	}//endfunction
+	
+	//=============================================================================
+	// loads specified asset type, external loaded pics
+	//=============================================================================
+	private function loadAssets(url:String,foldersDat:Object=null):void
+	{
+		//sideBtns.visible = false;
+		var req:URLRequest = new URLRequest(url);
+		var ldr:URLLoader = new URLLoader(req);
+		req.method = "post";  
+		var vars:URLVariables = new URLVariables();  
+		vars.token = userToken;  
+		req.data = vars;
+		ldr.load(req);
+		ldr.addEventListener(Event.COMPLETE, onComplete);  
+		function onComplete(e:Event):void
+		{	
+			var i:int = 0;
+			// ----- when received data from server
+			try {
+				var o:Object = JSON.parse(ldr.data);
+				dat = o.data as Array;
+			} 
+			catch (e:Error)
+			{
+				trace("ERROR!!!! loadAssets(" + url + ") : \n" + ldr.data);
+				o = {data:[]};
+				dat = [];
+			}
+			
+			//trace("loadAssets(" + url + ") : \n" + PPTool.prnObject(dat));
+			Btns = new Vector.<Sprite>();
 			
 			// ----- fill with new Btns
-			Btns = new Vector.<Sprite>();
-			if (o.data!=null)
-			for (var i:int=0; i<o.data.length; i++)
+			if (dat!=null)
+			for (i=0; i<dat.length; i++)
 			{
 				var s:Sprite = new Sprite();
-				var tf:TextField = PPTool.utils.createText(o.data[i].photoname,-1,12,0x666666);
+				var tf:TextField = PPTool.utils.createText(dat[i].photoname,-1,12,0x666666);
 				tf.y = bh-tf.height;
 				s.addChild(tf);
 				drawStripedRect(s,0,0,bw,bh-tf.height,0xFFFFFF,0xF6F6F6,20,10);
@@ -4672,27 +5045,69 @@ class RHSMenu
 				s.mouseChildren = false;
 				Btns.push(s);
 			}
+			
+			// ----- if have folders add them to front
+			if (foldersDat != null)
+			{
+				trace("??? foldersDat="+foldersDat);
+				function setLoadSubfolderFn(d:Object):void
+				{
+					d.loadSubFolderFn = function():void 
+					{
+						loadAssets(url + "&dirid=" + d.id);
+					}
+				}
+				for (i=foldersDat.length-1; i>-1; i--)
+				{
+					dat.unshift(foldersDat[i]);
+					setLoadSubfolderFn(foldersDat[i])
+					// create icon sprite
+					s = new Sprite();			
+					s.graphics.beginFill(0x000066, 0);
+					s.graphics.drawRect(0, 0, bw, bh);
+					s.graphics.endFill();
+					var tf:TextField = PPTool.utils.createText(foldersDat[i].dirname,-1,12,0x666666);
+					tf.y = bh - tf.height;
+					tf.x = (bw - tf.width) / 2;
+					s.addChild(tf);
+					Btns.unshift(s);
+					var ico:Sprite = new IcoAssetFolder();
+					ico.x = (s.width - ico.width) / 2;
+					ico.y = (s.height - tf.height - ico.height) / 2;
+					s.addChild(ico);
+				}
+			}//endif
+			
+			
 			pageTo(page);
 			
 			// ----- start loading the pics 
 			var lidx:int=0;
 			function loadNext():void
 			{
-				if (o.data != null && lidx < o.data.length)
+				if (dat != null && lidx <dat.length)
 				{
-					var picUrl:String = baseUrl + "thumb.php?src="+o.data[lidx].pic+"&w=100"
-					MenuUtils.loadAsset(picUrl,function(pic:Bitmap):void
+					if (dat[lidx].pic != null)
 					{
-						if (lidx >= Btns.length)	return;
-						var tf:TextField = (TextField)(Btns[lidx].getChildAt(0));
-						pic.width = bw;
-						pic.height = bh-tf.height;
-						Btns[lidx].addChild(pic);
-						o.data[lidx].bmd = pic.bitmapData;
-						tf.x = (pic.width-tf.width)/2;
+						var picUrl:String = baseUrl + "thumb.php?src="+dat[lidx].pic+"&w=100"
+						MenuUtils.loadAsset(picUrl,function(pic:Bitmap):void
+						{
+							if (lidx >= Btns.length)	return;
+							var tf:TextField = (TextField)(Btns[lidx].getChildAt(0));
+							pic.width = bw;
+							pic.height = bh-tf.height;
+							Btns[lidx].addChild(pic);
+							dat[lidx].bmd = pic.bitmapData;
+							tf.x = (pic.width-tf.width)/2;
+							lidx++;
+							loadNext();
+						});
+					}
+					else
+					{
 						lidx++;
 						loadNext();
-					});
+					}
 				}
 				//if (dat != null && lidx >= dat.length)	sideBtns.visible = true;
 			} //endfunction
@@ -4701,7 +5116,7 @@ class RHSMenu
 	}//endfunction
 	
 	//=============================================================================
-	// loads specified asset type, external loaded pics
+	// loads the arrow box selections
 	//=============================================================================
 	public function loadProducts():void
 	{
@@ -4785,14 +5200,11 @@ class RHSMenu
 	private	var isNormal:Boolean = true;
 	public function showNormal():void
 	{
-		trace("showNormal");
 		if (isNormal) return;
 		isNormal = true;
 		trace("showNormal!!");
 		sideBtns.visible = true;
-		if (curTab==0)	loadAssetsType(1);
-		if (curTab==1)	loadCombo("0");
-		if (curTab==2)	loadCombo("1");
+		LoadFns[curTab]();
 	}//endfunction
 	
 	//=============================================================================
@@ -4831,15 +5243,19 @@ class RHSMenu
 	}//endfunction
 	
 	//=============================================================================
-	// create a new page or go to the page on click
+	// when icon pressed, returns created image by callback to put onto canvas
 	//=============================================================================
 	private function mouseDownHandler(ev:Event):void
 	{
 		// ----- thumbnail pressed
-		if (con.hitTestPoint(canvas.stage.mouseX,canvas.stage.mouseY))
-		{
-			for (var i:int=0; i<Btns.length; i++)
-				if (Btns[i].parent==con && Btns[i].hitTestPoint(canvas.stage.mouseX,canvas.stage.mouseY))
+		for (var i:int=0; i<Btns.length; i++)
+			if (Btns[i].parent==con && Btns[i].hitTestPoint(canvas.stage.mouseX,canvas.stage.mouseY))
+			{
+				if (dat[i].dirname != null && dat[i].id != null)	// clicked on folder
+				{
+					if (dat[i].loadSubFolderFn != null) dat[i].loadSubFolderFn();
+				}
+				else	// clicked on asset thumb
 				{
 					var img:Image = new Image(dat[i].id, dat[i].pic, dat[i].bmd);	// each dat[i] is project elem
 					MenuUtils.loadAsset(baseUrl+img.url, function(bmp:Bitmap):void 
@@ -4853,13 +5269,14 @@ class RHSMenu
 					} );
 					if (dat[i].data!=null)
 						img.data = JSON.parse(dat[i].data).layers;
-					if (clickCallBack!=null)	clickCallBack(img);
+					if (clickCallBack != null)	clickCallBack(img);
 				}
-		}
+			}
+		
 	}//endfunction
 	
 	//=============================================================================
-	// create a new page or go to the page on click
+	//
 	//=============================================================================
 	private function mouseUpHandler(ev:Event):void
 	{
@@ -4883,6 +5300,19 @@ class RHSMenu
 						(MovieClip)(btn.getChildAt(j)).gotoAndStop(2);
 				}
 			}
+		
+		// ----- the folder button on top right
+		if (btnFolder.hitTestPoint(canvas.stage.mouseX, canvas.stage.mouseY))
+		{
+			if (curTab == 0)		navigateToURL(new URLRequest(baseUrl+"?n=home&a=tools&c=flash"));
+			else if (curTab == 1)	navigateToURL(new URLRequest(baseUrl+"?c=photo&a=designer"));
+			else if (curTab == 2)
+			{
+				if (subCat == "产品收藏") 		navigateToURL(new URLRequest(baseUrl + "??n=home&a=product&c=product"));
+				else if (subCat == "搭配收藏") 	navigateToURL(new URLRequest(baseUrl + "??n=home&a=scheme&c=match"));
+				else if (subCat == "灵感图收藏") 	navigateToURL(new URLRequest(baseUrl + "??n=home&a=scheme&c=photo"));
+			}
+		}
 		
 		// ----- switch page according to page buttons
 		var icosPerPage:int = Math.floor((height-marg*2)/(bh+marg))*3;
@@ -4915,18 +5345,24 @@ class RHSMenu
 			con.addChild(btn);
 		}
 		
-		pageBtns.graphics.clear();
+		while (pageBtns.numChildren > 0) pageBtns.removeChildAt(0);
 		for (i=0; i<totalPages; i++)
 		{
+			var tf:TextField = null;
 			if (i==idx)
-				pageBtns.graphics.beginFill(0x999999,1);
+			{
+				tf = PPTool.utils.createText((i + 1) + "", -1, 12, 0xFFFFFF);
+				tf.background = true;
+				tf.backgroundColor = 0x999999;
+			}
 			else
-				pageBtns.graphics.beginFill(0x333333,1);
-			pageBtns.graphics.drawRect(i*10,0,5,5);
-			pageBtns.graphics.endFill();
-		}
-		pageBtns.y = height-pageBtns.height-10;
-		pageBtns.x = 50;
+				tf = PPTool.utils.createText((i + 1) + "", -1, 12, 0x999999);
+			tf.x = i * 20;
+			pageBtns.addChild(tf);
+		}			
+		
+		pageBtns.y = height-pageBtns.height-5;
+		pageBtns.x = (canvas.width-pageBtns.width)/2;
 		page = idx;
 	}//endfunction	
 	
@@ -4953,6 +5389,7 @@ class RHSMenu
 		
 		return s;
 	}//endfunction 
+	
 }//endclass
 
 class Image
@@ -4962,6 +5399,7 @@ class Image
 	public var url:String = null;				// url of pic 
 	public var bmd:BitmapData = null;			// loaded bitmap data of pic
 	public var data:Object = null;				// other data corresponding to this 
+	public var locked:Boolean = false;			// if locked from editing
 	
 	//=============================================================================
 	// 

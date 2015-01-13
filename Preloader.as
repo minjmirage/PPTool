@@ -6,6 +6,7 @@ package {
 	import flash.display.Sprite;
 	import flash.events.Event;
 	import flash.events.ProgressEvent;
+	import flash.filters.GlowFilter;
 	import flash.text.TextField;
 	import flash.text.TextFormat;
 	import flash.net.URLRequest;
@@ -17,6 +18,7 @@ package {
 		public var ldr:Loader = null;
 		public var baseUrl:String = "http://ruanzhuangyun.cn/";// "http://symspace.e360.cn/";
 		public var userToken:String = null;
+		public var id:String = "446";
 		
 		//
 		//
@@ -28,11 +30,13 @@ package {
 			stage.align = "topLeft";
 			
 			if (root.loaderInfo.parameters.httpURL!=null) baseUrl = root.loaderInfo.parameters.httpURL+"";	// why the F$%$ this doesnt work
-			if (root.loaderInfo.parameters.token!=null) userToken = root.loaderInfo.parameters.token+"";
+			if (root.loaderInfo.parameters.token != null) userToken = root.loaderInfo.parameters.token + "";
+			if (root.loaderInfo.parameters.id != null) id = root.loaderInfo.parameters.id + "";
 			if (baseUrl.charAt(baseUrl.length - 1) != "/")	baseUrl += "/";
 			
 			ldr = new Loader();             			// create a new instance of the Loader class
-			ldr.load(new URLRequest("PPTool.swf")); 	// in this case both SWFs are in the same folder 
+			trace("root.loaderInfo.loaderURL="+root.loaderInfo.loaderURL);
+			ldr.load(new URLRequest(root.loaderInfo.loaderURL.split("Preloader.swf")[0] + "PPTool.swf")); 	// in this case both SWFs are in the same folder 
 			
 			var tf:TextField = new TextField();
 			tf.autoSize = "left";
@@ -45,6 +49,7 @@ package {
 			
 			var prog:int = 0;
 			var ppp:Sprite = this;
+			ppp.filters = [new GlowFilter(0x000000,0.5,4,4,1,1)];
 			function enterFrameHandler(e:Event):void 
 			{
 				var sw:int = stage.stageWidth;
@@ -60,9 +65,9 @@ package {
 				ppp.graphics.clear();
 				ppp.graphics.beginFill(0x99AAFF, 1);
 				ppp.graphics.moveTo(sw/2,sh/2-100);
-				for (var i:int = 0; i <= prog/100*360; i++)
+				for (var i:int = 0; i <= prog/99*360; i++)
 					ppp.graphics.lineTo(sw/2+Math.sin(i/180*Math.PI)*100, sh/2-Math.cos(i/180*Math.PI)*100);
-				for (; i>=0; i--)
+				for (i--; i>=0; i--)
 					ppp.graphics.lineTo(sw/2+Math.sin(i/180*Math.PI)*90, sh/2-Math.cos(i/180*Math.PI)*90);
 				ppp.graphics.endFill();
 				
